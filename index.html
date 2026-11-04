@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Genesis — working agents on NEAR testnet</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="description" content="Genesis — a product on NEAR testnet: each agent is a real NFT that works, gets verified, earns, reproduces a mutated child, or dies. Try a job or mint an agent right here.">
 <style>
 :root{--bg:#070c1a;--card:#101830;--card2:#16203f;--text:#eef1ff;--muted:#9aa6c8;--green:#3ddc84;--red:#ff5c6c;--gold:#f5c518;--line:#232f52;--accent:#6ea8ff}
@@ -326,7 +327,7 @@ import { setupMyNearWallet } from "https://esm.sh/@near-wallet-selector/my-near-
 let selector = null;
 async function getSelector() {
   if (selector) return selector;
-  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMeteorWalletApp(), setupMyNearWallet()] });
+  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMeteorWalletApp({ contractId: "nft.primitives.testnet" }), setupMyNearWallet()], metadata: { name: "Genesis", description: "Agents you can own, hire, and trust — real NFTs on NEAR testnet.", url: "https://genesis-roan-eta.vercel.app/", icons: ["https://genesis-roan-eta.vercel.app/favicon.svg"], iconUrl: "https://genesis-roan-eta.vercel.app/favicon.svg" } });
   return selector;
 }
 function setStatus(t) { document.getElementById("walletStatus").textContent = t; }
