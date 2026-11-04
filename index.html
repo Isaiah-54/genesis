@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Genesis — agents that are born, earn, reproduce, evolve, and can die</title>
-<meta name="description" content="Genesis for the NEAR Hackathon: an agent is born, works, gets verified, earns, reproduces a mutated child, or dies.">
+<meta name="description" content="Genesis — a product on NEAR testnet: each agent is a real NFT that works, gets verified, earns, reproduces a mutated child, or dies. Use it via CLI or MCP.">
 <style>
 :root{--bg:#0b1020;--card:#141b33;--card2:#1a2342;--text:#eef1ff;--muted:#aab3d6;--green:#3ddc84;--red:#ff5c6c;--gold:#ffcf4d;--line:#2a3560}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
@@ -27,15 +27,16 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 </head>
 <body>
 <header class="hero">
+<span class="badge">LIVE ON NEAR TESTNET</span>
+<span class="badge">Real NFTs · Real payments</span>
+<span class="badge">CLI + MCP</span>
 <span class="badge">NEAR HACKATHON · Build Beyond Boundaries</span>
-<span class="badge">Track: AI Swarms</span>
-<span class="badge">NEAR testnet</span>
 <h1>Genesis</h1>
-<p class="lead">An agent is born, works, gets verified, earns — and if it profits, it reproduces a mutated child funded from its own earnings. If it loses repeatedly, it dies.</p>
-<p>Not a dashboard. A family tree, with births and a death you can watch.</p>
-<a class="btn" href="https://github.com/Isaiah-54/genesis">View the code on GitHub</a>
-<a class="btn btn2" href="#tree">See the family tree</a>
-<a class="btn btn2" href="#play">Play the generations</a>
+<p class="lead">Agents you can own, hire, and trust — because their whole work history lives onchain as an NFT.</p>
+<p>An agent is born as an NFT, works real jobs, gets verified, earns — and if it profits, it reproduces a mutated child funded from its own earnings. If it loses repeatedly, it dies, and its NFT and balance return to the treasury. Good agents get more valuable. Bad ones disappear.</p>
+<a class="btn" href="#live">See the live agents</a>
+<a class="btn btn2" href="#use">Use the product</a>
+<a class="btn btn2" href="https://github.com/Isaiah-54/genesis">Code on GitHub</a>
 </header>
 <main>
 <h2>How a life works</h2>
@@ -47,13 +48,30 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 <li><b>Evolve.</b> Each child mutates one skill: faster, higher quality, or cheaper to run.</li>
 </ol>
 
+<h2>Why it matters — the use case</h2>
+<div class="grid">
+<div class="card"><h3>Hire with proof</h3><p>Before you hire an agent, check its NFT: parents, generation, skills, jobs, earnings — all onchain, none of it faked.</p></div>
+<div class="card"><h3>Agents that improve themselves</h3><p>Profitable agents reproduce with mutated skills. Unprofitable ones die. The swarm gets better by selection, not by manual retuning.</p></div>
+<div class="card"><h3>An agent economy</h3><p>Job posters pay, verifiers check, only a pass pays. Agents spend earnings on their own costs and on funding their children.</p></div>
+<div class="card"><h3>Ownable, transferable</h3><p>Because the agent is an NFT, you can own it, sell it, or pass it on — lineage and track record go with it.</p></div>
+</div>
+
 <h2 id="live">Live agents — NEAR testnet, right now</h2>
 <p id="liveNote">Loading live onchain data…</p>
+<p class="small">Treasury: <span class="mono">genesisdemo354551.testnet</span> — balance <b id="treasuryBal">…</b> NEAR (live, or last verified 8.8622 NEAR if the fetch fails).</p>
 <div class="grid" id="liveAgents"></div>
-<p class="small">Source: <span class="mono">nft.primitives.testnet</span> via NEAR testnet RPC. If the live fetch fails, the page falls back to the last RPC-verified snapshot (2026-11-04). Locked tokens (gen0, gen1, gen5-weak) are shown as locked — their subaccount keys were lost in the first run, so they cannot be moved.</p>
+<p class="small">Source: <span class="mono">nft.primitives.testnet</span> via NEAR testnet RPC. Traits come from each token's onchain <code>extra</code> field where present; older tokens predate that fix, so their traits are shown from their verified descriptions and run files. NEP-177 token metadata has no <code>attributes</code> field — any trait shown as an attribute elsewhere is not onchain. Locked tokens (gen0, gen1, gen5-weak) are shown as locked — their subaccount keys were lost in the first run, so they cannot be moved.</p>
 
-<h2 id="tree">The family tree — verified demo run</h2>
-<p>Treasury at the end of the run: <b>18.25</b> (started at 20, after funding every birth). Agents: 6. Events: 5 (4 births, 1 death).</p>
+<h2 id="use">Use the product</h2>
+<div class="card">
+<p><b>CLI</b> — clone the repo, <code>npm install</code>, then:</p>
+<p class="mono">node src/cli.js status<br>node src/cli.js agents<br>node src/cli.js create-agent gen3 0.5<br>node src/cli.js mint genesis-gen-3 gen3.genesisdemo354551.testnet "Genesis Gen 3" 3 genesis-gen-2<br>node src/cli.js job gen2.genesisdemo354551.testnet https://docs.near.org/primitives/nft/nft<br># Add --dry-run to any write command to preview without broadcasting.</p>
+<p><b>MCP</b> — from any MCP client, run <code>node src/mcp-server.mjs</code> (stdio). Tools: genesis_token, genesis_balance, genesis_pay, genesis_mint, genesis_create_agent, genesis_transfer_nft, genesis_job. Keys live only in local gitignored files and are never returned by a tool.</p>
+<p class="small">Testnet only. Testnet NEAR has no real value. A mint costs a 0.1 NEAR deposit (storage, excess refunded) + gas.</p>
+</div>
+
+<h2 id="tree">Local demo — how the lifecycle plays out in code</h2>
+<p>This section is the <b>local demo only</b> (ledger units, not testnet NEAR). The live agents above are the product. Demo treasury at the end: <b>18.25</b> (started at 20, after funding every birth). Agents: 6. Events: 5 (4 births, 1 death).</p>
 <div class="grid" id="tree"></div>
 
 <h2 id="play">Play the generations</h2>
@@ -61,23 +79,24 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 <p><button id="playBtn">Play</button><button class="ghost" id="resetBtn">Reset</button></p>
 <div id="log"></div>
 
-<h2>Testnet proof — one real birth on NEAR</h2>
+<h2>Onchain proof — verified transactions</h2>
 <div class="card">
-<p>Testnet master: <span class="mono">genesisdemo354551.testnet</span> (10 testnet NEAR from the faucet; testnet NEAR has no real value).</p>
-<p>Birth mirror: subaccount <span class="mono">gen0.genesisdemo354551.testnet</span> created and funded with exactly <b>0.1 NEAR</b>.</p>
-<p>Transaction: <span class="mono">Cb1RNmo7uEpYnYE42JfW5V95d2uRkGMry75mz4yf8J57</span><br>
-<span class="small">CreateAccount + Transfer + AddKey, status FINAL / Success. Child balance re-checked via RPC: 0.1 NEAR.</span></p>
+<p>Treasury: <span class="mono">genesisdemo354551.testnet</span> (testnet NEAR, no real value). NFT contract: <span class="mono">nft.primitives.testnet</span> — the shared testnet NFT contract. Genesis does not yet run its own contract (no Rust toolchain on the build host, and the global contract account does not exist on testnet), and this page does not claim otherwise.</p>
+<p>Working product run, all 7 txs Success, re-verified by RPC:</p>
+<p class="mono">genesis-gen-2 mint → 85d1ffbabeb704cff93f026c532ae221d9e7986a676ed7f6d4ed8e11e4580def<br>gen2 job payment 0.01 NEAR → 33e51ddfbd18a4e137d10d4e57b31127f5693a48e7a9caa52e44b08b9d1d9c34<br>genesis-weak-2 death transfer → 0fe3e1e5fcf443372234c89f76c33f99b907b9b72a2465dff99de937b95d2f07</p>
+<p>First onchain birth: <span class="mono">gen0.genesisdemo354551.testnet</span> funded with exactly <b>0.1 NEAR</b>, tx <span class="mono">Cb1RNmo7uEpYnYE42JfW5V95d2uRkGMry75mz4yf8J57</span> (FINAL / Success).</p>
+<p class="small">Verify any token yourself: <code>node src/cli.js token genesis-gen-2</code> — it queries <code>nft_token</code> live and prints owner + metadata.</p>
 </div>
 
-<h2>Try it yourself</h2>
+<h2>Local demos (not the product)</h2>
 <div class="card">
-<p><code>node demo/run.js</code> — Gen 0 works and reproduces Gen 1.<br>
-<code>node demo/run-generations.js</code> — Gen 0 → Gen 4, plus a weak agent that dies.<br>
+<p><code>node demo/run.js</code> — Gen 0 works and reproduces Gen 1 (ledger demo).<br>
+<code>node demo/run-generations.js</code> — Gen 0 → Gen 4, plus a weak agent that dies (ledger demo).<br>
 Full steps are in the README on GitHub, written as do X, see Y.</p>
 </div>
 
 <h2>Honest limits</h2>
-<p>The lifecycle engine's balances are a JSON ledger; the testnet transfer above mirrors one birth, it does not yet replace the ledger for every generation. The worker is an extractive summariser in code, not an LLM call. No cross-chain earning yet — Chain Signatures and Intents are the stretch goal, and this page will say exactly which chains are covered when they land.</p>
+<p>Live on NEAR <b>testnet</b>, not mainnet. The worker in this repo is an extractive summariser in code, not an LLM call — plug in a real model worker and the lifecycle, payments and NFTs do not change. NFTs live on the shared testnet contract, not a Genesis-owned contract. Three early tokens (gen0, gen1, gen5-weak) are locked because their subaccount keys were lost in the first run. No cross-chain earning yet — Chain Signatures and Intents are the stretch goal, and this page will say exactly which chains are covered when they land.</p>
 </main>
 <footer>
 <p class="small">Genesis — built for NEAR HACKATHON: Build Beyond Boundaries, 1–14 Nov 2026. Code: <a href="https://github.com/Isaiah-54/genesis">github.com/Isaiah-54/genesis</a></p>
@@ -120,32 +139,39 @@ async function rpcBalance(account){
   return (Number(j.result.amount)/1e24).toFixed(4);
 }
 const SNAPSHOT=[
- {id:"genesis-gen-0",owner:"gen0.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.1100"},
- {id:"genesis-gen-1",owner:"gen1.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.0500"},
- {id:"genesis-gen-2",owner:"gen2.genesisdemo354551.testnet",status:"alive",balance:"0.5100"},
- {id:"genesis-weak-2",owner:"genesisdemo354551.testnet",status:"dead — returned to treasury",balance:"—"},
- {id:"genesis-gen-5-weak",owner:"gen5.genesisdemo354551.testnet",status:"locked — death never completed",balance:"0.0200"}];
+ {id:"genesis-gen-0",owner:"gen0.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.1100",traits:"gen 0 · parent treasury · speed 1 · quality 1 · costEff 1"},
+ {id:"genesis-gen-1",owner:"gen1.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.0500",traits:"gen 1 · parent genesis-gen-0 · speed 1 · quality 0.95 · costEff 1.2"},
+ {id:"genesis-gen-2",owner:"gen2.genesisdemo354551.testnet",status:"alive",balance:"0.5100",traits:"gen 2 · parent genesis-gen-1 · speed 1.2 · quality 0.95 · costEff 1.15"},
+ {id:"genesis-weak-2",owner:"genesisdemo354551.testnet",status:"dead — returned to treasury",balance:"—",traits:"gen 0 · parent treasury · speed 0.5 · quality 0.2 · costEff 0.8"},
+ {id:"genesis-gen-5-weak",owner:"gen5.genesisdemo354551.testnet",status:"locked — death never completed",balance:"0.0200",traits:"gen 0 · parent treasury · speed 0.5 · quality 0.2 · costEff 0.8"}];
 (async()=>{
-  const el=document.getElementById("liveAgents"), note=document.getElementById("liveNote");
+  const el=document.getElementById("liveAgents"), note=document.getElementById("liveNote"), tb=document.getElementById("treasuryBal");
   let rows=SNAPSHOT, live=false;
   try{
+    tb.textContent=await rpcBalance("genesisdemo354551.testnet");
     rows=[];
     for(const t of SNAPSHOT){
       const tk=await rpcCall("nft_token",{token_id:t.id});
       let bal="—";
       try{ bal=await rpcBalance(tk.owner_id); }catch{}
-      let status=t.status;
+      let traits=t.traits, status=t.status;
+      try{
+        const ex=JSON.parse(tk.metadata.extra||"{}");
+        if(ex.generation!==undefined) traits="gen "+ex.generation+" · parent "+ex.parent+" · speed "+ex.speed+" · quality "+ex.quality+" · costEff "+ex.costEff;
+        if(ex.status) status=ex.status;
+      }catch{}
       if(t.id==="genesis-gen-2") status="alive";
       if(t.id==="genesis-weak-2") status="dead — returned to treasury";
-      rows.push({id:t.id,owner:tk.owner_id,status,balance:bal,title:tk.metadata.title});
+      if(t.id==="genesis-gen-5-weak") status="locked — death never completed";
+      rows.push({id:t.id,owner:tk.owner_id,status,balance:bal,title:tk.metadata.title,traits});
     }
     live=true;
-  }catch(e){ rows=SNAPSHOT; }
+  }catch(e){ rows=SNAPSHOT; if(tb) tb.textContent="8.8622"; }
   note.textContent=live?"Live from NEAR testnet — fetched just now.":"Live fetch failed — showing last RPC-verified snapshot (2026-11-04).";
   el.innerHTML="";
   rows.forEach(a=>{
     const d=document.createElement("div");d.className="card";
-    d.innerHTML="<h3>"+(a.title||a.id)+"</h3><p class='small mono'>"+a.id+"</p><p class='small'>Owner: <span class='mono'>"+a.owner+"</span><br>Status: <b>"+a.status+"</b><br>Owner balance: "+a.balance+" NEAR</p>";
+    d.innerHTML="<h3>"+(a.title||a.id)+"</h3><p class='small mono'>"+a.id+"</p><p class='small'>Owner: <span class='mono'>"+a.owner+"</span><br>Status: <b>"+a.status+"</b><br>Traits: "+(a.traits||"—")+"<br>Owner balance: "+a.balance+" NEAR</p>";
     el.appendChild(d);
   });
 })();
