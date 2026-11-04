@@ -292,11 +292,12 @@ document.getElementById("runJobBtn").onclick=async()=>{
 <script type="module">
 import { setupWalletSelector } from "https://esm.sh/@near-wallet-selector/core@10.1.4";
 import { setupMeteorWallet } from "https://esm.sh/@near-wallet-selector/meteor-wallet@10.1.4";
+import { setupMeteorWalletApp } from "https://esm.sh/@near-wallet-selector/meteor-wallet-app@10.1.4";
 import { setupMyNearWallet } from "https://esm.sh/@near-wallet-selector/my-near-wallet@10.1.4";
 let selector = null;
 async function getSelector() {
   if (selector) return selector;
-  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMyNearWallet()] });
+  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMeteorWalletApp(), setupMyNearWallet()] });
   return selector;
 }
 function setStatus(t) { document.getElementById("walletStatus").textContent = t; }
@@ -321,18 +322,24 @@ function showDetect() {
   const el = document.getElementById("walletDetect");
   if (el) el.textContent = meteorDetected()
     ? "Meteor wallet detected in this browser — Connect will sign in-app."
-    : "No Meteor wallet detected in this browser — that is why Connect opens a webpage. Open this site inside the Meteor app (Meteor → Browser → paste this link) to sign in-app, or use the website button below to create / import one.";
+    : "No injected Meteor wallet in this browser — so Connect uses Meteor App instant link instead: it opens the Meteor app on your phone to approve, not a create/import webpage. (If the Meteor app is not installed, install it first.)";
 }
 async function connect(walletId) {
   try {
+    // Meteor has TWO wallet-selector modules: "meteor-wallet" is the injected
+    // extension/in-app wallet, "meteor-wallet-app" is the instant-link mobile
+    // app. The mobile app's browser does not inject, so on a phone without
+    // injection the instant-link module is the correct one — it opens the
+    // Meteor app to approve instead of a create/import webpage.
+    let id = walletId;
     if (walletId === "meteor-wallet" && !meteorDetected()) {
-      setStatus("No Meteor wallet found in this browser, so signing in-app is impossible from here. Open this site inside the Meteor app to connect in-app — or tap \"Open Meteor website anyway\" to create / import a wallet on the Meteor website.");
-      document.getElementById("walletMeteorWebBtn").style.display = "inline-block";
-      return;
+      id = "meteor-wallet-app";
+      setStatus("No injected Meteor found — connecting via Meteor App instant link (opens the Meteor app to approve)…");
+    } else {
+      setStatus("Connecting… (injected Meteor, signing in-app)");
     }
-    setStatus("Connecting… (in the Meteor app this stays in-app — no website redirect)");
     const s = await getSelector();
-    const w = await s.wallet(walletId);
+    const w = await s.wallet(id);
     await w.signIn({ contractId: "nft.primitives.testnet", methodNames: ["nft_mint"] });
     await refresh();
   } catch (e) { setStatus("Connect failed: " + e.message); }
