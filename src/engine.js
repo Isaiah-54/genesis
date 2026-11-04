@@ -73,4 +73,4 @@ function lifecycle(agent, treasury) {
   }
   return null;
 }
-module.exports = { BIRTH_COST, makeAgent, doJob, lifecycle };
+module.exports = { BIRTH_COST, makeAgent, doJob, lifecycle, work, verify };

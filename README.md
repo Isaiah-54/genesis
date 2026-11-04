@@ -41,6 +41,15 @@ Prerequisite: Node 20+ (no other install needed for v0).
 Length (minimum words), keyword coverage (at least half the job keywords),
 nothing else. It is a separate code path from the worker, by design.
 
+## Working product (v2, NEAR testnet — real NFTs, real payments)
+Each generation is a real NEP-171 NFT on `nft.primitives.testnet`.
+Clean run, all 7 txs Success and re-verified by RPC
+(`demo/working-product-run.json`):
+- `genesis-gen-2` → owner `gen2.genesisdemo354551.testnet`, balance 0.51 NEAR (0.5 birth + 0.01 job payment for a real job from a live NEAR docs page, verified 3/3 keywords, PASS)
+- `genesis-weak-2` → died: owner back to treasury `genesisdemo354551.testnet`, weak2 balance 0.3496 NEAR after returning 0.15 NEAR
+- MCP server: `node src/mcp-server.mjs` — tools for token, balance, pay, mint, create-agent, transfer-NFT, job. Tested over stdio: tools list + balance call return live testnet data.
+- Honest limit: the first run's gen0/gen1/gen5 NFTs are on-chain but locked (their subaccount keys were never saved). They are documented in DESIGN.md, not claimed as working agents. The v2 key-save-first rule prevents this.
+
 ## Testnet proof (v1, verified)
 - Testnet master: `genesisdemo354551.testnet` (funded 10 testnet NEAR via
   the testnet faucet — testnet NEAR has no real value).

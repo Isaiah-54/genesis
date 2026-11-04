@@ -1,0 +1,108 @@
+{
+  "master": "genesisdemo354551.testnet",
+  "nftContract": "nft.primitives.testnet",
+  "txs": [
+    {
+      "label": "create gen2 subaccount funded 0.5 NEAR",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "gen2.genesisdemo354551.testnet",
+      "hash": "7e3d119db6e44a99c22d61baf568d1f972ee530ea4e1d1b701608d83d7405bfd",
+      "status": "Success"
+    },
+    {
+      "label": "nft_mint genesis-gen-2 to gen2 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "nft.primitives.testnet",
+      "hash": "85d1ffbabeb704cff93f026c532ae221d9e7986a676ed7f6d4ed8e11e4580def",
+      "status": "Success"
+    },
+    {
+      "label": "job payment 0.01 NEAR to gen2 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "gen2.genesisdemo354551.testnet",
+      "hash": "33e51ddfbd18a4e137d10d4e57b31127f5693a48e7a9caa52e44b08b9d1d9c34",
+      "status": "Success"
+    },
+    {
+      "label": "create weak2 subaccount funded 0.5 NEAR",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "weak2.genesisdemo354551.testnet",
+      "hash": "52b3fdaf87fda3a3dcbe0232630461a8bc70b02b7c3c432f737af0b4d897f094",
+      "status": "Success"
+    },
+    {
+      "label": "nft_mint genesis-weak-2 to weak2 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "nft.primitives.testnet",
+      "hash": "01e0ce205d1c3f0ce0b4c0cb88a8ca008ad0847507fda9b1dcc68f700c251536",
+      "status": "Success"
+    },
+    {
+      "label": "death transfer genesis-weak-2 to treasury",
+      "signerId": "weak2.genesisdemo354551.testnet",
+      "receiverId": "nft.primitives.testnet",
+      "hash": "0fe3e1e5fcf443372234c89f76c33f99b907b9b72a2465dff99de937b95d2f07",
+      "status": "Success"
+    },
+    {
+      "label": "weak2 balance return 0.15 NEAR to treasury",
+      "signerId": "weak2.genesisdemo354551.testnet",
+      "receiverId": "genesisdemo354551.testnet",
+      "hash": "db1ee3cdee8eb815b3d01d47ad6e6ad71c49ad135cd753ca5863fe2d584cc4e3",
+      "status": "Success"
+    }
+  ],
+  "notes": [
+    "Keys saved to .testnet-agents.json BEFORE any creation tx."
+  ],
+  "job": {
+    "source": "https://docs.near.org/primitives/nft/nft (live fetch)",
+    "textLength": 3000,
+    "outputWords": 450,
+    "keywordsCovered": "3/3",
+    "pass": true
+  },
+  "verification": {
+    "gen2": {
+      "token_id": "genesis-gen-2",
+      "owner_id": "gen2.genesisdemo354551.testnet",
+      "metadata": {
+        "title": "Genesis Gen 2",
+        "description": "Genesis agent, generation 2. Child of Gen 1 (skill costEff 1.15). Works real jobs, gets verified and paid on NEAR testnet.",
+        "media": "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 288 288%27%3E%3Crect width=%27288%27 height=%27288%27 fill=%27%230b1020%27/%3E%3Ccircle cx=%27144%27 cy=%27144%27 r=%2790%27 fill=%27%233ddc84%27/%3E%3Ctext x=%27144%27 y=%27160%27 font-size=%2764%27 text-anchor=%27middle%27 fill=%27%230b1020%27 font-family=%27sans-serif%27 font-weight=%27bold%27%3EG2%3C/text%3E%3C/svg%3E",
+        "media_hash": null,
+        "copies": null,
+        "issued_at": null,
+        "expires_at": null,
+        "starts_at": null,
+        "updated_at": null,
+        "extra": null,
+        "reference": null,
+        "reference_hash": null
+      },
+      "approved_account_ids": {}
+    },
+    "weak2": {
+      "token_id": "genesis-weak-2",
+      "owner_id": "genesisdemo354551.testnet",
+      "metadata": {
+        "title": "Genesis Weak 2",
+        "description": "Weak Genesis branch, quality 0.2. Dies: its NFT and balance return to the treasury.",
+        "media": "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 288 288%27%3E%3Crect width=%27288%27 height=%27288%27 fill=%27%230b1020%27/%3E%3Ccircle cx=%27144%27 cy=%27144%27 r=%2790%27 fill=%27%233ddc84%27/%3E%3Ctext x=%27144%27 y=%27160%27 font-size=%2764%27 text-anchor=%27middle%27 fill=%27%230b1020%27 font-family=%27sans-serif%27 font-weight=%27bold%27%3EW2%3C/text%3E%3C/svg%3E",
+        "media_hash": null,
+        "copies": null,
+        "issued_at": null,
+        "expires_at": null,
+        "starts_at": null,
+        "updated_at": null,
+        "extra": null,
+        "reference": null,
+        "reference_hash": null
+      },
+      "approved_account_ids": {}
+    },
+    "gen2Balance": "510000000000000000000000",
+    "weak2Balance": "349615854861757499999999",
+    "masterBalance": "8862197041446729899999999"
+  }
+}

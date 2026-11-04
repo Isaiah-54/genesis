@@ -2,3 +2,4 @@ node_modules/
 .testnet-account.json
 *.key
 .env
+.testnet-agents.json

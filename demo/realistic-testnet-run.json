@@ -1,0 +1,57 @@
+{
+  "master": "genesisdemo354551.testnet",
+  "nftContract": "nft.primitives.testnet",
+  "txs": [
+    {
+      "label": "nft_transfer genesis-gen-0 to gen0 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "nft.primitives.testnet",
+      "hash": "b27bffd7421bb8a1cf63e025167dde8ff7dac411c0192cf5e13d3c4f4e4233d9",
+      "status": "Success"
+    },
+    {
+      "label": "job payment 0.01 NEAR to gen0 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "gen0.genesisdemo354551.testnet",
+      "hash": "76394d22847d221faa8305e5a4f70a371d463bd88088769bf1eae7e045866761",
+      "status": "Success"
+    },
+    {
+      "label": "create gen1 subaccount funded 0.05 NEAR",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "gen1.genesisdemo354551.testnet",
+      "hash": "3d740f6d4d84e6fe38159084f04226e43d93ddfb8f175ba7dd6df2d1645bec24",
+      "status": "Success"
+    },
+    {
+      "label": "nft_mint genesis-gen-1 to gen1 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "nft.primitives.testnet",
+      "hash": "4af6ba2cd1498e7fe3874b6883c1d14cc5e56df77da5815a7bf1de031b047a25",
+      "status": "Success"
+    },
+    {
+      "label": "create weak gen5 subaccount funded 0.02 NEAR",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "gen5.genesisdemo354551.testnet",
+      "hash": "44c01e4ad0a6aa80a9b070aabbaae7dcd72ebdbfb9d37870fcb75ac7b401e9c6",
+      "status": "Success"
+    },
+    {
+      "label": "nft_mint genesis-gen-5-weak to gen5 subaccount",
+      "signerId": "genesisdemo354551.testnet",
+      "receiverId": "nft.primitives.testnet",
+      "hash": "09f10d013e0f65036c07abb7bbe01676b4849690ec14dfe3ca67a63863ddc86c",
+      "status": "Success"
+    }
+  ],
+  "notes": [],
+  "job": {
+    "source": "https://docs.near.org/primitives/nft/nft (live fetch)",
+    "textLength": 3000,
+    "outputWords": 450,
+    "keywordsCovered": "3/3",
+    "pass": true,
+    "output": " <html lang=\"en\" class=\"dark\" data-banner-state=\"visible\" data-assistant-state=\"closed\" data-page-mode=\"none\" data-current-path=\"/\" > Using NFTs - NEAR Docs (function(c){var P=c.primary,F=c.fallbacks,found,probes={},checks={},down,reported;window.__mintAssets=P;function owned(el){return !el.closest('#root')&&!el.hasAttribute('data-precedence')}function type(r){return (r.headers.get('content-type')||'').toLowerCase()}function fits(r,rest){var t=type(r),f=rest.split('?')[0];return r.ok&&(/\\.css$/."
+  }
+}
