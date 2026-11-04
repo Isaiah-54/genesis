@@ -1,0 +1,8 @@
+{
+  "network": "testnet",
+  "master": "genesisdemo354551.testnet",
+  "masterBalanceNear": "10",
+  "child": "gen0.genesisdemo354551.testnet",
+  "childTx": null,
+  "note": "Birth funding mirror only. Engine ledger in src/engine.js remains the lifecycle source of truth in v0/v1."
+}

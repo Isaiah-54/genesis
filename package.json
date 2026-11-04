@@ -1,0 +1,15 @@
+{
+  "name": "genesis",
+  "version": "1.0.0",
+  "description": "Built for NEAR HACKATHON: Build Beyond Boundaries (1–14 Nov 2026). Tracks: AI Swarms (primary), Agent Economy, NFTs That Do Something, Autonomous Business.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "near-api-js": "^5.1.1"
+  }
+}

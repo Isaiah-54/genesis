@@ -1,0 +1,10 @@
+{
+  "master": "genesisdemo354551.testnet",
+  "childId": "gen0.genesisdemo354551.testnet",
+  "childPublicKey": "ed25519:5cSgeM4KpFHu4G7FNBu5rigKLAP56hdsXYZDR6h13swV",
+  "signedTxHashHex": "ac26c76596b4c898b627df816c9ee532d3894a7c1284c856128a0e8689d7880a",
+  "broadcastStatus": {
+    "SuccessValue": ""
+  },
+  "note": "Signed locally, broadcast via curl."
+}

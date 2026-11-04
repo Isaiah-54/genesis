@@ -1,0 +1,187 @@
+{
+  "treasury": {
+    "balance": 18.25
+  },
+  "agents": [
+    {
+      "id": "gen-0",
+      "generation": 0,
+      "parent": null,
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "costEff": 1,
+        "language": "en"
+      },
+      "balance": 1.4,
+      "status": "alive",
+      "jobsDone": 3,
+      "earned": 2,
+      "consecutiveFails": 1
+    },
+    {
+      "id": "gen-1",
+      "generation": 1,
+      "parent": "gen-0",
+      "skill": {
+        "speed": 1,
+        "quality": 0.95,
+        "costEff": 1.2,
+        "language": "en"
+      },
+      "balance": 1.5,
+      "status": "alive",
+      "jobsDone": 3,
+      "earned": 2,
+      "consecutiveFails": 1
+    },
+    {
+      "id": "gen-2",
+      "generation": 2,
+      "parent": "gen-1",
+      "skill": {
+        "speed": 1.2,
+        "quality": 0.95,
+        "costEff": 1.15,
+        "language": "en"
+      },
+      "balance": 1.4782608695652177,
+      "status": "alive",
+      "jobsDone": 3,
+      "earned": 2,
+      "consecutiveFails": 1
+    },
+    {
+      "id": "gen-3",
+      "generation": 3,
+      "parent": "gen-2",
+      "skill": {
+        "speed": 1.15,
+        "quality": 1.15,
+        "costEff": 1.15,
+        "language": "en"
+      },
+      "balance": 1.4782608695652177,
+      "status": "alive",
+      "jobsDone": 3,
+      "earned": 2,
+      "consecutiveFails": 1
+    },
+    {
+      "id": "gen-4",
+      "generation": 4,
+      "parent": "gen-3",
+      "skill": {
+        "speed": 1.15,
+        "quality": 1.0999999999999999,
+        "costEff": 1.3499999999999999,
+        "language": "en"
+      },
+      "balance": 1,
+      "status": "alive",
+      "jobsDone": 0,
+      "earned": 0,
+      "consecutiveFails": 0
+    },
+    {
+      "id": "gen-5",
+      "generation": 0,
+      "parent": null,
+      "skill": {
+        "speed": 0.5,
+        "quality": 0.2,
+        "costEff": 0.8,
+        "language": "en"
+      },
+      "balance": 0,
+      "status": "dead",
+      "jobsDone": 3,
+      "earned": 0,
+      "consecutiveFails": 3
+    }
+  ],
+  "events": [
+    {
+      "event": "birth",
+      "parent": "gen-0",
+      "child": "gen-1",
+      "generation": 1,
+      "childSkill": {
+        "speed": 1,
+        "quality": 0.95,
+        "costEff": 1.2,
+        "language": "en"
+      }
+    },
+    {
+      "event": "birth",
+      "parent": "gen-1",
+      "child": "gen-2",
+      "generation": 2,
+      "childSkill": {
+        "speed": 1.2,
+        "quality": 0.95,
+        "costEff": 1.15,
+        "language": "en"
+      }
+    },
+    {
+      "event": "birth",
+      "parent": "gen-2",
+      "child": "gen-3",
+      "generation": 3,
+      "childSkill": {
+        "speed": 1.15,
+        "quality": 1.15,
+        "costEff": 1.15,
+        "language": "en"
+      }
+    },
+    {
+      "event": "birth",
+      "parent": "gen-3",
+      "child": "gen-4",
+      "generation": 4,
+      "childSkill": {
+        "speed": 1.15,
+        "quality": 1.0999999999999999,
+        "costEff": 1.3499999999999999,
+        "language": "en"
+      }
+    },
+    {
+      "event": "death",
+      "agent": "gen-5",
+      "generation": 0
+    }
+  ],
+  "log": [
+    "BIRTH gen-0 generation 0, balance 1, treasury 19",
+    "GEN0 JOB job-a-gen-0 -> PASS (3/3 keywords, 20 words), balance 1.8",
+    "GEN0 JOB job-b-gen-0 -> PASS (3/3 keywords, 22 words), balance 2.6",
+    "GEN0 JOB job-c-gen-0 -> FAIL (3/3 keywords, 17 words), balance 2.4",
+    "BIRTH gen-1 generation 1",
+    "BIRTH gen-1 generation 1, skill {\"speed\":1,\"quality\":0.95,\"costEff\":1.2,\"language\":\"en\"}, balance 1",
+    "GEN1 JOB job-a-gen-1 -> PASS (3/3 keywords, 20 words), balance 1.8333",
+    "GEN1 JOB job-b-gen-1 -> PASS (3/3 keywords, 22 words), balance 2.6667",
+    "GEN1 JOB job-c-gen-1 -> FAIL (3/3 keywords, 17 words), balance 2.5",
+    "BIRTH gen-2 generation 2",
+    "BIRTH gen-2 generation 2, skill {\"speed\":1.2,\"quality\":0.95,\"costEff\":1.15,\"language\":\"en\"}, balance 1",
+    "GEN2 JOB job-a-gen-2 -> PASS (3/3 keywords, 20 words), balance 1.8261",
+    "GEN2 JOB job-b-gen-2 -> PASS (3/3 keywords, 22 words), balance 2.6522",
+    "GEN2 JOB job-c-gen-2 -> FAIL (3/3 keywords, 17 words), balance 2.4783",
+    "BIRTH gen-3 generation 3",
+    "BIRTH gen-3 generation 3, skill {\"speed\":1.15,\"quality\":1.15,\"costEff\":1.15,\"language\":\"en\"}, balance 1",
+    "GEN3 JOB job-a-gen-3 -> PASS (3/3 keywords, 20 words), balance 1.8261",
+    "GEN3 JOB job-b-gen-3 -> PASS (3/3 keywords, 22 words), balance 2.6522",
+    "GEN3 JOB job-c-gen-3 -> FAIL (3/3 keywords, 17 words), balance 2.4783",
+    "BIRTH gen-4 generation 4",
+    "BIRTH gen-4 generation 4, skill {\"speed\":1.15,\"quality\":1.0999999999999999,\"costEff\":1.3499999999999999,\"language\":\"en\"}, balance 1 (newborn, not yet worked in this demo)",
+    "BIRTH gen-5 WEAK generation 0, skill {\"speed\":0.5,\"quality\":0.2,\"costEff\":0.8,\"language\":\"en\"}, balance 1",
+    "WEAK JOB job-a-gen-5 -> FAIL (2/3 keywords, 10 words), balance 0.75",
+    "WEAK JOB job-b-gen-5 -> FAIL (2/3 keywords, 10 words), balance 0.5",
+    "WEAK JOB job-c-gen-5 -> FAIL (3/3 keywords, 9 words), balance 0.25",
+    "DEATH gen-5 generation 0",
+    "TREASURY 18.2500 | AGENTS 6 | EVENTS 5"
+  ]
+}
