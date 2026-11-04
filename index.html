@@ -92,7 +92,9 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 <div class="card">
 <p><b>Testnet only. Testnet NEAR has no real value.</b> Connect with <b>Meteor</b> — in the Meteor app this connects in-app, it does not open a website — or with MyNearWallet instead. Pick a unique token id, and sign the mint yourself in your own wallet. Genesis never sees your key. The NFT lands on the shared testnet contract <span class="mono">nft.primitives.testnet</span> with a 0.1 testnet NEAR storage deposit (excess is refunded by the contract). If the wallet library fails to load, use the CLI instead — see below.</p>
 <p><button id="walletBtn">Connect Meteor wallet</button><button class="ghost" id="walletMyNearBtn">Use MyNearWallet instead</button><button class="ghost" id="walletOutBtn" style="display:none">Sign out</button></p>
+<p class="small" id="walletDetect">Checking for a wallet in this browser…</p>
 <p class="small" id="walletStatus">Not connected.</p>
+<p><button class="ghost" id="walletMeteorWebBtn" style="display:none">Open Meteor website anyway (create / import)</button></p>
 <div id="mintForm" style="display:none">
 <label class="small">Token id (must be unique — try genesis-yourname-1)</label><input id="mintToken" value="genesis-visitor-1">
 <label class="small">Title</label><input id="mintTitle" value="Genesis Visitor Agent">
@@ -314,8 +316,20 @@ async function refresh() {
     }
   } catch (e) { setStatus("Wallet failed to load: " + e.message + " — use the CLI instead."); }
 }
+function meteorDetected() { return typeof window !== "undefined" && window.meteorWallet != null; }
+function showDetect() {
+  const el = document.getElementById("walletDetect");
+  if (el) el.textContent = meteorDetected()
+    ? "Meteor wallet detected in this browser — Connect will sign in-app."
+    : "No Meteor wallet detected in this browser — that is why Connect opens a webpage. Open this site inside the Meteor app (Meteor → Browser → paste this link) to sign in-app, or use the website button below to create / import one.";
+}
 async function connect(walletId) {
   try {
+    if (walletId === "meteor-wallet" && !meteorDetected()) {
+      setStatus("No Meteor wallet found in this browser, so signing in-app is impossible from here. Open this site inside the Meteor app to connect in-app — or tap \"Open Meteor website anyway\" to create / import a wallet on the Meteor website.");
+      document.getElementById("walletMeteorWebBtn").style.display = "inline-block";
+      return;
+    }
     setStatus("Connecting… (in the Meteor app this stays in-app — no website redirect)");
     const s = await getSelector();
     const w = await s.wallet(walletId);
@@ -323,8 +337,18 @@ async function connect(walletId) {
     await refresh();
   } catch (e) { setStatus("Connect failed: " + e.message); }
 }
+async function connectMeteorWeb() {
+  try {
+    const s = await getSelector();
+    const w = await s.wallet("meteor-wallet");
+    await w.signIn({ contractId: "nft.primitives.testnet", methodNames: ["nft_mint"] });
+    await refresh();
+  } catch (e) { setStatus("Connect failed: " + e.message); }
+}
 document.getElementById("walletBtn").onclick = () => connect("meteor-wallet");
 document.getElementById("walletMyNearBtn").onclick = () => connect("my-near-wallet");
+document.getElementById("walletMeteorWebBtn").onclick = () => connectMeteorWeb();
+showDetect();
 document.getElementById("walletOutBtn").onclick = async () => {
   try { const s = await getSelector(); const w = await s.wallet(); await w.signOut(); } catch {}
   await refresh();
