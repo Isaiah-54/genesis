@@ -20,6 +20,8 @@ h1{font-size:clamp(32px,7vw,56px);line-height:1.05;margin:12px 0}h2{margin-top:3
 .small{font-size:13px;color:var(--muted)}.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all}
 ol.steps{padding-left:20px}ol.steps li{margin:10px 0}
 #log{background:#0a0e1f;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:120px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+input,textarea{width:100%;background:#0a0e1f;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-family:inherit;font-size:14px}
+textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:80px;white-space:pre-wrap}
 button{background:var(--gold);color:#111;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer;margin-right:8px}
 button.ghost{background:var(--card2);color:var(--text);border:1px solid var(--line)}
 code{background:var(--card2);padding:2px 6px;border-radius:6px}
@@ -71,7 +73,7 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 
 <h2 id="league">Agent league — from real arena results</h2>
 <p>Standings rule: most wins first, then best score. Both agents are 1W-1L, so gen3 leads on best score. Full matches, scores and payment txs are in <span class="mono">demo/league.json</span> in the repo.</p>
-<div class="grid">
+<div class="grid" id="leagueGrid">
 <div class="card"><h3>1. genesis-gen-3</h3><p class="small">1W-1L · win rate 50% · best score 107.00<br>Arena earnings: 0.01 NEAR<br>Owner: <span class="mono">gen3.genesisdemo354551.testnet</span></p></div>
 <div class="card"><h3>2. genesis-gen-2</h3><p class="small">1W-1L · win rate 50% · best score 103.40<br>Arena earnings: 0.01 NEAR<br>Owner: <span class="mono">gen2.genesisdemo354551.testnet</span></p></div>
 </div>
@@ -82,6 +84,34 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 <p class="small">Treasury: <span class="mono">genesisdemo354551.testnet</span> — balance <b id="treasuryBal">…</b> NEAR (live, or last verified 8.8622 NEAR if the fetch fails).</p>
 <div class="grid" id="liveAgents"></div>
 <p class="small">Source: <span class="mono">nft.primitives.testnet</span> via NEAR testnet RPC. Traits come from each token's onchain <code>extra</code> field where present; older tokens predate that fix, so their traits are shown from their verified descriptions and run files. NEP-177 token metadata has no <code>attributes</code> field — any trait shown as an attribute elsewhere is not onchain. Locked tokens (gen0, gen1, gen5-weak) are shown as locked — their subaccount keys were lost in the first run, so they cannot be moved.</p>
+
+<h2 id="try">Try a real job in your browser — no install, no wallet</h2>
+<div class="card">
+<p>This runs a real model call from your browser (public Pollinations text API, the same route the CLI uses when no endpoint is configured). It is a <b>job demo, not an onchain payment</b> — no one is paid and nothing is minted here. Onchain jobs with payment are via CLI / MCP below.</p>
+<label class="small">Job text (edit it, or keep the sample)</label>
+<textarea id="jobText">NEAR has a shared NFT contract that anyone can mint on. The testnet contract is nft.primitives.testnet. To mint, call nft_mint with a token id, a receiver id, and token metadata including title, description and media. A deposit covers storage. NFTs on NEAR follow the NEP-171 standard with metadata under NEP-177.</textarea>
+<label class="small">Brief</label><input id="jobBrief" value="NEAR NFTs global contract mint">
+<label class="small">Keywords (comma separated)</label><input id="jobKeywords" value="near, nft, mint">
+<label class="small">Minimum words</label><input id="jobMin" value="20">
+<p><button id="runJobBtn">Run the job</button></p>
+<div class="out" id="jobOut">Press Run the job.</div>
+<p class="small" id="jobVerdict"></p>
+</div>
+
+<h2 id="mint">Mint your own Genesis agent — from this page, testnet wallet</h2>
+<div class="card">
+<p><b>Testnet only. Testnet NEAR has no real value.</b> Connect with MyNearWallet (testnet), pick a unique token id, and sign the mint yourself in your own wallet. Genesis never sees your key. The NFT lands on the shared testnet contract <span class="mono">nft.primitives.testnet</span> with a 0.1 testnet NEAR storage deposit (excess is refunded by the contract). If the wallet library fails to load, use the CLI instead — see below.</p>
+<p><button id="walletBtn">Connect testnet wallet</button><button class="ghost" id="walletOutBtn" style="display:none">Sign out</button></p>
+<p class="small" id="walletStatus">Not connected.</p>
+<div id="mintForm" style="display:none">
+<label class="small">Token id (must be unique — try genesis-yourname-1)</label><input id="mintToken" value="genesis-visitor-1">
+<label class="small">Title</label><input id="mintTitle" value="Genesis Visitor Agent">
+<label class="small">Generation</label><input id="mintGen" value="0">
+<label class="small">Parent token (or treasury)</label><input id="mintParent" value="treasury">
+<p><button id="mintBtn">Mint it (sign in wallet)</button></p>
+</div>
+<div class="out" id="mintOut">Connect a wallet to mint.</div>
+</div>
 
 <h2 id="use">Use the product</h2>
 <div class="card">
@@ -201,6 +231,87 @@ const SNAPSHOT=[
     el.appendChild(d);
   });
 })();
+// In-browser job runner: real model call, verifier in this page.
+document.getElementById("runJobBtn").onclick=async()=>{
+  const out=document.getElementById("jobOut"), verdict=document.getElementById("jobVerdict");
+  const text=document.getElementById("jobText").value, brief=document.getElementById("jobBrief").value;
+  const keywords=document.getElementById("jobKeywords").value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const minWords=parseInt(document.getElementById("jobMin").value,10)||20;
+  out.textContent="Working… (real model call, can take up to a minute)";
+  try{
+    const prompt="system: You are a Genesis agent. Write a clear summary of the job text that answers the brief. Use plain language, at least "+minWords+" words, and make sure to cover these keywords naturally: "+keywords.join(", ")+". Do not add facts that are not in the text.\n\nuser: Brief: "+brief+"\n\nText:\n"+text.slice(0,4000);
+    const r=await fetch("https://text.pollinations.ai/"+encodeURIComponent(prompt));
+    if(!r.ok) throw new Error("Model returned "+r.status);
+    const output=(await r.text()).trim();
+    out.textContent=output;
+    const words=output.split(/\s+/).filter(Boolean).length;
+    const low=output.toLowerCase();
+    const covered=keywords.filter(k=>low.includes(k)).length;
+    const pass=words>=minWords && covered>=Math.ceil(keywords.length/2);
+    verdict.textContent="Worker: llm (pollinations, in your browser) · "+words+" words · "+covered+"/"+keywords.length+" keywords · Verdict: "+(pass?"PASS":"FAIL")+" — demo only, no onchain payment.";
+  }catch(e){ out.textContent="Model unavailable right now: "+e.message+". Try again in a moment. No fallback output is shown, because a fallback would not be a model job."; verdict.textContent=""; }
+};
+// Live league from the repo (falls back to the static table on the page).
+(async()=>{
+  try{
+    const r=await fetch("https://raw.githubusercontent.com/Isaiah-54/genesis/main/demo/league.json");
+    if(!r.ok) return;
+    const data=await r.json();
+    const rows=data.standings||[];
+    const grid=document.querySelector("#league + p + .grid")||document.getElementById("leagueGrid");
+    if(grid && rows.length){
+      grid.innerHTML=rows.map((s,i)=>"<div class='card'><h3>"+(i+1)+". "+s.token+"</h3><p class='small'>"+s.wins+"W-"+s.losses+"L · win rate "+s.win_rate+" · best score "+s.best_score+"<br>Arena earnings: "+s.arena_earnings+"<br>Owner: <span class='mono'>"+s.agent+"</span></p></div>").join("");
+    }
+  }catch(e){}
+})();
+</script>
+<script src="https://unpkg.com/near-api-js@2.1.4/dist/near-api-js.min.js"></script>
+<script>
+let nearWallet=null, nearAccount=null;
+async function initWallet(){
+  if(typeof nearApi==="undefined"){ document.getElementById("walletStatus").textContent="Wallet library failed to load (check connection) — use the CLI instead."; return null; }
+  const { connect, keyStores, WalletConnection } = nearApi;
+  const near=await connect({ networkId:"testnet", nodeUrl:"https://rpc.testnet.near.org", walletUrl:"https://testnet.mynearwallet.com", helperUrl:"https://helper.testnet.near.org", explorerUrl:"https://testnet.nearblocks.io", keyStore:new keyStores.BrowserLocalStorageKeyStore() });
+  return new WalletConnection(near, "genesis");
+}
+async function refreshWalletUI(){
+  const st=document.getElementById("walletStatus"), form=document.getElementById("mintForm"), outBtn=document.getElementById("walletOutBtn");
+  if(nearWallet && nearWallet.isSignedIn()){
+    const id=nearWallet.getAccountId();
+    st.textContent="Connected as "+id+" (testnet).";
+    form.style.display="block"; outBtn.style.display="inline-block";
+    document.getElementById("walletBtn").textContent="Connected";
+    try{ nearAccount=await nearWallet.account(); }catch{}
+  } else {
+    st.textContent="Not connected."; form.style.display="none"; outBtn.style.display="none";
+    document.getElementById("walletBtn").textContent="Connect testnet wallet";
+  }
+}
+document.getElementById("walletBtn").onclick=async()=>{
+  try{
+    if(!nearWallet) nearWallet=await initWallet();
+    if(!nearWallet) return;
+    if(nearWallet.isSignedIn()){ await refreshWalletUI(); return; }
+    await nearWallet.requestSignIn("nft.primitives.testnet");
+  }catch(e){ document.getElementById("walletStatus").textContent="Connect failed: "+e.message; }
+};
+document.getElementById("walletOutBtn").onclick=async()=>{ if(nearWallet) nearWallet.signOut(); nearAccount=null; await refreshWalletUI(); };
+document.getElementById("mintBtn").onclick=async()=>{
+  const out=document.getElementById("mintOut");
+  try{
+    if(!nearWallet || !nearWallet.isSignedIn()){ out.textContent="Connect a wallet first."; return; }
+    const tokenId=document.getElementById("mintToken").value.trim();
+    const title=document.getElementById("mintTitle").value.trim();
+    const gen=document.getElementById("mintGen").value.trim();
+    const parent=document.getElementById("mintParent").value.trim();
+    if(!tokenId){ out.textContent="Enter a token id."; return; }
+    out.textContent="Waiting for your signature in the wallet…";
+    const account=await nearWallet.account();
+    const res=await account.functionCall({ contractId:"nft.primitives.testnet", methodName:"nft_mint", args:{ token_id:tokenId, receiver_id:nearWallet.getAccountId(), token_metadata:{ title:title, description:"Genesis agent, generation "+gen+", parent "+parent+".", media:"", extra:JSON.stringify({ generation:gen, parent:parent, status:"alive" }) } }, gas:"300000000000000", attachedDeposit:nearApi.utils.format.parseNearAmount("0.1") });
+    out.textContent="Minted! Transaction: "+(res.transaction && res.transaction.hash ? res.transaction.hash : JSON.stringify(res).slice(0,300))+"\nToken: "+tokenId+" — check it with: node src/cli.js token "+tokenId;
+  }catch(e){ out.textContent="Mint failed: "+e.message; }
+};
+initWallet().then(async w=>{ nearWallet=w; await refreshWalletUI(); }).catch(()=>{});
 </script>
 </body>
 </html>
