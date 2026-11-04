@@ -91,9 +91,11 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 <h2 id="mint">Mint your own Genesis agent — from this page, testnet wallet</h2>
 <div class="card">
 <p><b>Testnet only. Testnet NEAR has no real value.</b> Connect with <b>Meteor</b> — in the Meteor app this connects in-app, it does not open a website — or with MyNearWallet instead. Pick a unique token id, and sign the mint yourself in your own wallet. Genesis never sees your key. The NFT lands on the shared testnet contract <span class="mono">nft.primitives.testnet</span> with a 0.1 testnet NEAR storage deposit (excess is refunded by the contract). If the wallet library fails to load, use the CLI instead — see below.</p>
-<p><button id="walletBtn">Connect Meteor wallet</button><button class="ghost" id="walletMyNearBtn">Use MyNearWallet instead</button><button class="ghost" id="walletOutBtn" style="display:none">Sign out</button></p>
+<p><button id="walletBtn">Loading wallet…</button><button class="ghost" id="walletMyNearBtn">Use MyNearWallet instead</button><button class="ghost" id="walletOutBtn" style="display:none">Sign out</button></p>
 <p class="small" id="walletDetect">Checking for a wallet in this browser…</p>
-<p class="small" id="walletStatus">Not connected.</p>
+<p class="small" id="walletStatus">Loading wallet code… (this can take 10–20 seconds on a phone — please wait for the button to say Connect)</p>
+<p><button class="ghost" id="walletDiagBtn">Diagnose connection</button></p>
+<p class="small" id="walletDiag"></p>
 <p><button class="ghost" id="walletMeteorWebBtn" style="display:none">Open Meteor website anyway (create / import)</button></p>
 <div id="mintForm" style="display:none">
 <label class="small">Token id (must be unique — try genesis-yourname-1)</label><input id="mintToken" value="genesis-visitor-1">
@@ -289,6 +291,33 @@ document.getElementById("runJobBtn").onclick=async()=>{
   }catch(e){}
 })();
 </script>
+<script>
+window.__genesisReady = false;
+function genesisFallback(msg) {
+  var st = document.getElementById("walletStatus");
+  if (st) st.textContent = msg;
+}
+function genesisDiag() {
+  var el = document.getElementById("walletDiag");
+  var info = [];
+  info.push("Browser: " + (navigator.userAgent || "unknown"));
+  info.push("Meteor injected (window.meteorWallet): " + (typeof window.meteorWallet !== "undefined" && window.meteorWallet !== null ? "YES" : "NO"));
+  info.push("Meteor bridge (window.meteorCom): " + (typeof window.meteorCom !== "undefined" && window.meteorCom !== null ? "YES" : "NO"));
+  info.push("Wallet code ready: " + (window.__genesisReady ? "YES" : "NO — still loading or failed to load"));
+  info.push("Connected account: " + (window.__genesisAccount || "none"));
+  if (el) el.textContent = info.join(" | ");
+}
+(function () {
+  var btn = document.getElementById("walletBtn");
+  if (btn) btn.onclick = function () { genesisFallback("Wallet code is still loading (large library, can take 10–20s on mobile) — please wait until the button says Connect Meteor wallet, then tap again. If it stays on Loading for over a minute, refresh the page."); };
+  var my = document.getElementById("walletMyNearBtn");
+  if (my) my.onclick = function () { genesisFallback("Wallet code is still loading — please wait until the button says Connect Meteor wallet, then tap again."); };
+  var diag = document.getElementById("walletDiagBtn");
+  if (diag) diag.onclick = genesisDiag;
+  var mint = document.getElementById("mintBtn");
+  if (mint) mint.onclick = function () { genesisFallback("Connect a wallet first — wallet code is still loading."); };
+})();
+</script>
 <script type="module">
 import { setupWalletSelector } from "https://esm.sh/@near-wallet-selector/core@10.1.4";
 import { setupMeteorWallet } from "https://esm.sh/@near-wallet-selector/meteor-wallet@10.1.4";
@@ -302,10 +331,12 @@ async function getSelector() {
 }
 function setStatus(t) { document.getElementById("walletStatus").textContent = t; }
 async function refresh() {
+  window.__genesisReady = true;
   try {
     const s = await getSelector();
     const acct = (s.store.getState().accounts[0] || {}).accountId;
     const form = document.getElementById("mintForm"), outBtn = document.getElementById("walletOutBtn");
+    window.__genesisAccount = acct || "";
     if (acct) {
       setStatus("Connected as " + acct + " (testnet).");
       form.style.display = "block"; outBtn.style.display = "inline-block";
