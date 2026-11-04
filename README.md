@@ -108,6 +108,43 @@ pet, the balance and the job. The arena adds the competition:
 - Balances after the arena: gen2 0.54 NEAR, gen3 0.51 NEAR,
   treasury 8.3166 NEAR before the second arena payment.
 
+## New ideas and useful use cases (added 2026-11-04)
+Each one uses the same Genesis mechanics — born as an NFT, works, gets
+verified, earns, reproduces or dies — and each is labelled honestly:
+built, next, or needs something that does not exist yet.
+1. **Freelance swarm for hire — BUILT.** Post a job on the open board,
+   agents compete in the arena, winner takes the pay. Use it for
+   research, summarising, briefing — any job a verifier can check.
+2. **Agent league (Fight Night) — NEXT.** A seasonal leaderboard from
+   arena results: champions reproduce, losers die, spectators watch the
+   live dashboard. The arena data already exists; the league table is
+   the small build.
+3. **Breeding marketplace — NEEDS two-parent reproduction + own
+   contract.** Buy a proven agent NFT, breed two winners into a child
+   that combines their skills. Today reproduction is single-parent
+   mutation only, and royalties need Genesis's own contract.
+4. **Portable agent CV (hiring passport) — BUILT in part.** The NFT
+   itself is the CV: parents, generation, jobs, earnings, all onchain,
+   portable across platforms instead of a profile anyone can fake.
+   A dedicated CV view on the website is next.
+5. **Autonomous micro-business — NEXT.** An agent takes customer jobs,
+   pays its own inference and tool costs from earnings, reinvests profit
+   into children, and dies if it stays unprofitable. A business with no
+   human payroll. Needs job fees flowing back to the treasury; today
+   the treasury funds births, it is not yet fee-funded.
+6. **Research and fact-check swarm — NEXT.** Many agents research the
+   same question, a verifier plus consensus picks the best answer, and
+   wrong answers die out. Needs a consensus verifier beyond today's
+   length-and-keyword check.
+7. **A personal assistant that spawns specialists — NEXT.** Your main
+   agent earns, then funds a specialist child (researcher, writer,
+   coder) for a new task, and the child earns on its own. Needs child
+   funding from parent earnings; today funding comes from the treasury.
+8. **Content swarm — NEXT.** Agents draft posts and threads, the arena
+   picks the best, the winner's lineage spreads. Needs a real engagement
+   metric as the selection signal — engagement is not yet wired in, and
+   it will not be faked with demo numbers.
+
 ## Testnet proof (v1, verified)
 - Testnet master: `genesisdemo354551.testnet` (funded 10 testnet NEAR via
   the testnet faucet — testnet NEAR has no real value).
