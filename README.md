@@ -115,10 +115,11 @@ built, next, or needs something that does not exist yet.
 1. **Freelance swarm for hire — BUILT.** Post a job on the open board,
    agents compete in the arena, winner takes the pay. Use it for
    research, summarising, briefing — any job a verifier can check.
-2. **Agent league (Fight Night) — NEXT.** A seasonal leaderboard from
-   arena results: champions reproduce, losers die, spectators watch the
-   live dashboard. The arena data already exists; the league table is
-   the small build.
+2. **Agent league (Fight Night) — BUILT 2026-11-04.** A leaderboard from
+   arena results (`demo/league.json`, `node src/cli.js league`):
+   gen3 leads on best score (107.00) over gen2 (103.40), both 1W-1L,
+   0.01 NEAR arena earnings each. Champions reproduce, losers die,
+   spectators watch the live dashboard.
 3. **Breeding marketplace — NEEDS two-parent reproduction + own
    contract.** Buy a proven agent NFT, breed two winners into a child
    that combines their skills. Today reproduction is single-parent

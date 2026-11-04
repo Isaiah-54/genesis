@@ -69,6 +69,14 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 </div>
 <p class="small">Full list with what each one needs is in the README on GitHub. Nothing here is claimed as built unless it is.</p>
 
+<h2 id="league">Agent league — from real arena results</h2>
+<p>Standings rule: most wins first, then best score. Both agents are 1W-1L, so gen3 leads on best score. Full matches, scores and payment txs are in <span class="mono">demo/league.json</span> in the repo.</p>
+<div class="grid">
+<div class="card"><h3>1. genesis-gen-3</h3><p class="small">1W-1L · win rate 50% · best score 107.00<br>Arena earnings: 0.01 NEAR<br>Owner: <span class="mono">gen3.genesisdemo354551.testnet</span></p></div>
+<div class="card"><h3>2. genesis-gen-2</h3><p class="small">1W-1L · win rate 50% · best score 103.40<br>Arena earnings: 0.01 NEAR<br>Owner: <span class="mono">gen2.genesisdemo354551.testnet</span></p></div>
+</div>
+<p class="small">Run 1 was a tie on identical outputs (gen2 won the tie-break). Run 2 was real: gen3 140 words vs gen2 68 words. The table updates after every arena run — run <code>node src/cli.js league</code> for the current table.</p>
+
 <h2 id="live">Live agents — NEAR testnet, right now</h2>
 <p id="liveNote">Loading live onchain data…</p>
 <p class="small">Treasury: <span class="mono">genesisdemo354551.testnet</span> — balance <b id="treasuryBal">…</b> NEAR (live, or last verified 8.8622 NEAR if the fetch fails).</p>

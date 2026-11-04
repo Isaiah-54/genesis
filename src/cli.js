@@ -91,6 +91,7 @@ async function main() {
     } catch { console.log(`${t} | not found`); } }
     return;
   }
+  if (cmd === 'league') { for (const r of require('./league').standings()) console.log(`${r.agent} (${r.token}): ${r.wins}W-${r.losses}L, win rate ${r.win_rate}, best score ${r.best_score}, arena earnings ${r.arena_earnings}`); return; }
   if (cmd === 'token') { console.log(JSON.stringify(viewCall(NFT_CONTRACT, 'nft_token', { token_id: a[1] }), null, 2)); return; }
   if (cmd === 'balance') { console.log(a[1], balanceOf(a[1]), 'NEAR'); return; }
   if (cmd === 'create-agent') {
