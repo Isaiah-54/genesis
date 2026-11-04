@@ -373,7 +373,19 @@ document.getElementById("mintBtn").onclick = async () => {
     if (!tokenId) { out.textContent = "Enter a token id."; return; }
     out.textContent = "Waiting for your signature in the wallet…";
     const w = await s.wallet();
-    const res = await w.signAndSendTransaction({ receiverId: "nft.primitives.testnet", actions: [{ type: "FunctionCall", params: { methodName: "nft_mint", args: { token_id: tokenId, receiver_id: acct, token_metadata: { title: title, description: "Genesis agent, generation " + gen + ", parent " + parent + ".", media: "", extra: JSON.stringify({ generation: gen, parent: parent, status: "alive" }) } }, gas: BigInt("300000000000000"), deposit: BigInt("100000000000000000000000") } }] });
+    const selectedId = s.store.getState().selectedWalletId;
+    const metadata = { title: title, description: "Genesis agent, generation " + gen + ", parent " + parent + ".", media: "", extra: JSON.stringify({ generation: gen, parent: parent, status: "alive" }) };
+    const argsObj = { token_id: tokenId, receiver_id: acct, token_metadata: metadata };
+    // Meteor App workaround: wallet-selector 10.1.4's meteor-wallet-app maps
+    // signAndSendTransaction actions through najActionToInternal, which
+    // expects NAJ-style actions ({ functionCall: {...} }) and throws
+    // "Unsupported NAJ action" for the normal { type, params } format.
+    // So for that wallet only, pass the NAJ-style action (args as bytes);
+    // every other wallet keeps the standard wallet-selector format.
+    const actions = selectedId === "meteor-wallet-app"
+      ? [{ functionCall: { methodName: "nft_mint", args: new TextEncoder().encode(JSON.stringify(argsObj)), gas: "300000000000000", deposit: "100000000000000000000000" } }]
+      : [{ type: "FunctionCall", params: { methodName: "nft_mint", args: argsObj, gas: BigInt("300000000000000"), deposit: BigInt("100000000000000000000000") } }];
+    const res = await w.signAndSendTransaction({ receiverId: "nft.primitives.testnet", actions });
     const hash = (res && res.transaction && res.transaction.hash) || (res && res.transaction_outcome && res.transaction_outcome.id) || "";
     out.textContent = "Minted! Transaction: " + hash + "\nToken: " + tokenId + " — check it with: node src/cli.js token " + tokenId;
   } catch (e) { out.textContent = "Mint failed: " + e.message; }
