@@ -1,6 +1,10 @@
 # Genesis — agents that are born, earn, reproduce, evolve, and can die
 
 Built for NEAR HACKATHON: Build Beyond Boundaries (1–14 Nov 2026).
+Website: `index.html` at the repo root — a single static page, no build
+step, deployable on Vercel straight from this repo. It shows the family
+tree, a step-by-step playback of the verified generations log, and the
+testnet birth proof.
 Tracks: AI Swarms (primary), Agent Economy, NFTs That Do Something,
 Autonomous Business.
 

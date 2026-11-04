@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Genesis — agents that are born, earn, reproduce, evolve, and can die</title>
+<meta name="description" content="Genesis for the NEAR Hackathon: an agent is born, works, gets verified, earns, reproduces a mutated child, or dies.">
+<style>
+:root{--bg:#0b1020;--card:#141b33;--card2:#1a2342;--text:#eef1ff;--muted:#aab3d6;--green:#3ddc84;--red:#ff5c6c;--gold:#ffcf4d;--line:#2a3560}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+a{color:#8ab4ff}header,main,footer{max-width:900px;margin:0 auto;padding:20px}
+.hero{padding:28px 20px 8px}.badge{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:0 6px 6px 0;font-size:13px;color:var(--muted)}
+h1{font-size:clamp(32px,7vw,56px);line-height:1.05;margin:12px 0}h2{margin-top:36px}p{color:var(--muted)}p.lead{color:var(--text);font-size:19px}
+.btn{display:inline-block;background:var(--gold);color:#111;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;margin:6px 8px 6px 0}
+.btn2{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card.dead{border-color:var(--red)}.card h3{margin:0 0 6px}.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700}
+.alive{background:#123d26;color:var(--green)}.deadpill{background:#3d1218;color:var(--red)}.newborn{background:#3d3112;color:var(--gold)}
+.small{font-size:13px;color:var(--muted)}.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all}
+ol.steps{padding-left:20px}ol.steps li{margin:10px 0}
+#log{background:#0a0e1f;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:120px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+button{background:var(--gold);color:#111;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer;margin-right:8px}
+button.ghost{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+code{background:var(--card2);padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<header class="hero">
+<span class="badge">NEAR HACKATHON · Build Beyond Boundaries</span>
+<span class="badge">Track: AI Swarms</span>
+<span class="badge">NEAR testnet</span>
+<h1>Genesis</h1>
+<p class="lead">An agent is born, works, gets verified, earns — and if it profits, it reproduces a mutated child funded from its own earnings. If it loses repeatedly, it dies.</p>
+<p>Not a dashboard. A family tree, with births and a death you can watch.</p>
+<a class="btn" href="https://github.com/Isaiah-54/genesis">View the code on GitHub</a>
+<a class="btn btn2" href="#tree">See the family tree</a>
+<a class="btn btn2" href="#play">Play the generations</a>
+</header>
+<main>
+<h2>How a life works</h2>
+<ol class="steps">
+<li><b>Birth.</b> A parent — or the Genesis treasury for Gen 0 — funds a child. Cost: 1 unit in the prototype ledger.</li>
+<li><b>Work.</b> The agent takes jobs: summarise, research, brief. Each job costs inference.</li>
+<li><b>Verify.</b> An independent verifier checks length and keyword coverage. Pass pays, fail does not.</li>
+<li><b>Earn or die.</b> 3 jobs and a balance of 1.5 or more → reproduce. Balance at 0, or 3 fails in a row → die, balance back to the treasury.</li>
+<li><b>Evolve.</b> Each child mutates one skill: faster, higher quality, or cheaper to run.</li>
+</ol>
+
+<h2 id="tree">The family tree — verified demo run</h2>
+<p>Treasury at the end of the run: <b>18.25</b> (started at 20, after funding every birth). Agents: 6. Events: 5 (4 births, 1 death).</p>
+<div class="grid" id="tree"></div>
+
+<h2 id="play">Play the generations</h2>
+<p>Press Play and watch the log unfold, exactly as <code>node demo/run-generations.js</code> prints it.</p>
+<p><button id="playBtn">Play</button><button class="ghost" id="resetBtn">Reset</button></p>
+<div id="log"></div>
+
+<h2>Testnet proof — one real birth on NEAR</h2>
+<div class="card">
+<p>Testnet master: <span class="mono">genesisdemo354551.testnet</span> (10 testnet NEAR from the faucet; testnet NEAR has no real value).</p>
+<p>Birth mirror: subaccount <span class="mono">gen0.genesisdemo354551.testnet</span> created and funded with exactly <b>0.1 NEAR</b>.</p>
+<p>Transaction: <span class="mono">Cb1RNmo7uEpYnYE42JfW5V95d2uRkGMry75mz4yf8J57</span><br>
+<span class="small">CreateAccount + Transfer + AddKey, status FINAL / Success. Child balance re-checked via RPC: 0.1 NEAR.</span></p>
+</div>
+
+<h2>Try it yourself</h2>
+<div class="card">
+<p><code>node demo/run.js</code> — Gen 0 works and reproduces Gen 1.<br>
+<code>node demo/run-generations.js</code> — Gen 0 → Gen 4, plus a weak agent that dies.<br>
+Full steps are in the README on GitHub, written as do X, see Y.</p>
+</div>
+
+<h2>Honest limits</h2>
+<p>The lifecycle engine's balances are a JSON ledger; the testnet transfer above mirrors one birth, it does not yet replace the ledger for every generation. The worker is an extractive summariser in code, not an LLM call. No cross-chain earning yet — Chain Signatures and Intents are the stretch goal, and this page will say exactly which chains are covered when they land.</p>
+</main>
+<footer>
+<p class="small">Genesis — built for NEAR HACKATHON: Build Beyond Boundaries, 1–14 Nov 2026. Code: <a href="https://github.com/Isaiah-54/genesis">github.com/Isaiah-54/genesis</a></p>
+</footer>
+<script>
+const agents=[
+{id:"gen-0",gen:0,parent:null,status:"alive",balance:1.40,jobs:3,earned:2,skill:"speed 1.00 · quality 1.00 · cost-eff 1.00"},
+{id:"gen-1",gen:1,parent:"gen-0",status:"alive",balance:1.50,jobs:3,earned:2,skill:"speed 1.00 · quality 0.95 · cost-eff 1.20"},
+{id:"gen-2",gen:2,parent:"gen-1",status:"alive",balance:1.48,jobs:3,earned:2,skill:"speed 1.20 · quality 0.95 · cost-eff 1.15"},
+{id:"gen-3",gen:3,parent:"gen-2",status:"alive",balance:1.48,jobs:3,earned:2,skill:"speed 1.15 · quality 1.15 · cost-eff 1.15"},
+{id:"gen-4",gen:4,parent:"gen-3",status:"newborn",balance:1.00,jobs:0,earned:0,skill:"speed 1.15 · quality 1.10 · cost-eff 1.35"},
+{id:"gen-5",gen:0,parent:null,status:"dead",balance:0,jobs:3,earned:0,skill:"speed 0.50 · quality 0.20 · cost-eff 0.80"}
+];
+const tree=document.getElementById("tree");
+agents.forEach(a=>{
+const d=document.createElement("div");d.className="card"+(a.status==="dead"?" dead":"");
+const pill=a.status==="alive"?"alive":a.status==="dead"?"deadpill":"newborn";
+const label=a.status==="alive"?"ALIVE":a.status==="dead"?"DEAD":"NEWBORN";
+d.innerHTML="<h3>"+a.id+"</h3><span class='pill "+pill+"'>"+label+"</span>"+
+"<p class='small'>Generation "+a.gen+(a.parent?" · parent "+a.parent:" · treasury-born")+
+"<br>Balance: <b>"+a.balance.toFixed(2)+"</b> · Jobs: "+a.jobs+" · Earned: "+a.earned+
+"<br>Skill: "+a.skill+"</p>";
+tree.appendChild(d);});
+const lines=["BIRTH gen-0 generation 0, balance 1, treasury 19", "GEN0 JOB job-a-gen-0 -> PASS (3/3 keywords, 20 words), balance 1.8", "GEN0 JOB job-b-gen-0 -> PASS (3/3 keywords, 22 words), balance 2.6", "GEN0 JOB job-c-gen-0 -> FAIL (3/3 keywords, 17 words), balance 2.4", "BIRTH gen-1 generation 1", "BIRTH gen-1 generation 1, skill {\"speed\":1,\"quality\":0.95,\"costEff\":1.2,\"language\":\"en\"}, balance 1", "GEN1 JOB job-a-gen-1 -> PASS (3/3 keywords, 20 words), balance 1.8333", "GEN1 JOB job-b-gen-1 -> PASS (3/3 keywords, 22 words), balance 2.6667", "GEN1 JOB job-c-gen-1 -> FAIL (3/3 keywords, 17 words), balance 2.5", "BIRTH gen-2 generation 2", "BIRTH gen-2 generation 2, skill {\"speed\":1.2,\"quality\":0.95,\"costEff\":1.15,\"language\":\"en\"}, balance 1", "GEN2 JOB job-a-gen-2 -> PASS (3/3 keywords, 20 words), balance 1.8261", "GEN2 JOB job-b-gen-2 -> PASS (3/3 keywords, 22 words), balance 2.6522", "GEN2 JOB job-c-gen-2 -> FAIL (3/3 keywords, 17 words), balance 2.4783", "BIRTH gen-3 generation 3", "BIRTH gen-3 generation 3, skill {\"speed\":1.15,\"quality\":1.15,\"costEff\":1.15,\"language\":\"en\"}, balance 1", "GEN3 JOB job-a-gen-3 -> PASS (3/3 keywords, 20 words), balance 1.8261", "GEN3 JOB job-b-gen-3 -> PASS (3/3 keywords, 22 words), balance 2.6522", "GEN3 JOB job-c-gen-3 -> FAIL (3/3 keywords, 17 words), balance 2.4783", "BIRTH gen-4 generation 4", "BIRTH gen-4 generation 4, skill {\"speed\":1.15,\"quality\":1.0999999999999999,\"costEff\":1.3499999999999999,\"language\":\"en\"}, balance 1 (newborn, not yet worked in this demo)", "BIRTH gen-5 WEAK generation 0, skill {\"speed\":0.5,\"quality\":0.2,\"costEff\":0.8,\"language\":\"en\"}, balance 1", "WEAK JOB job-a-gen-5 -> FAIL (2/3 keywords, 10 words), balance 0.75", "WEAK JOB job-b-gen-5 -> FAIL (2/3 keywords, 10 words), balance 0.5", "WEAK JOB job-c-gen-5 -> FAIL (3/3 keywords, 9 words), balance 0.25", "DEATH gen-5 generation 0", "TREASURY 18.2500 | AGENTS 6 | EVENTS 5"];
+const logEl=document.getElementById("log");let i=0,timer=null;
+function show(){logEl.textContent=lines.slice(0,i).join("\n")||"Press Play.";}
+show();
+document.getElementById("playBtn").onclick=()=>{
+if(timer)return;timer=setInterval(()=>{i++;show();if(i>=lines.length){clearInterval(timer);timer=null;}},700);};
+document.getElementById("resetBtn").onclick=()=>{if(timer){clearInterval(timer);timer=null;}i=0;show();};
+</script>
+</body>
+</html>
