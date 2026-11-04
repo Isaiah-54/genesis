@@ -90,8 +90,8 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 
 <h2 id="mint">Mint your own Genesis agent — from this page, testnet wallet</h2>
 <div class="card">
-<p><b>Testnet only. Testnet NEAR has no real value.</b> Connect with MyNearWallet (testnet), pick a unique token id, and sign the mint yourself in your own wallet. Genesis never sees your key. The NFT lands on the shared testnet contract <span class="mono">nft.primitives.testnet</span> with a 0.1 testnet NEAR storage deposit (excess is refunded by the contract). If the wallet library fails to load, use the CLI instead — see below.</p>
-<p><button id="walletBtn">Connect testnet wallet</button><button class="ghost" id="walletOutBtn" style="display:none">Sign out</button></p>
+<p><b>Testnet only. Testnet NEAR has no real value.</b> Connect with <b>Meteor</b> — in the Meteor app this connects in-app, it does not open a website — or with MyNearWallet instead. Pick a unique token id, and sign the mint yourself in your own wallet. Genesis never sees your key. The NFT lands on the shared testnet contract <span class="mono">nft.primitives.testnet</span> with a 0.1 testnet NEAR storage deposit (excess is refunded by the contract). If the wallet library fails to load, use the CLI instead — see below.</p>
+<p><button id="walletBtn">Connect Meteor wallet</button><button class="ghost" id="walletMyNearBtn">Use MyNearWallet instead</button><button class="ghost" id="walletOutBtn" style="display:none">Sign out</button></p>
 <p class="small" id="walletStatus">Not connected.</p>
 <div id="mintForm" style="display:none">
 <label class="small">Token id (must be unique — try genesis-yourname-1)</label><input id="mintToken" value="genesis-visitor-1">
@@ -287,52 +287,67 @@ document.getElementById("runJobBtn").onclick=async()=>{
   }catch(e){}
 })();
 </script>
-<script src="https://unpkg.com/near-api-js@2.1.4/dist/near-api-js.min.js"></script><script>
-let nearWallet=null, nearAccount=null;
-async function initWallet(){
-  if(typeof nearApi==="undefined"){ document.getElementById("walletStatus").textContent="Wallet library failed to load (check connection) — use the CLI instead."; return null; }
-  const { connect, keyStores, WalletConnection } = nearApi;
-  const near=await connect({ networkId:"testnet", nodeUrl:"https://rpc.testnet.near.org", walletUrl:"https://testnet.mynearwallet.com", helperUrl:"https://helper.testnet.near.org", explorerUrl:"https://testnet.nearblocks.io", keyStore:new keyStores.BrowserLocalStorageKeyStore() });
-  return new WalletConnection(near, "genesis");
+<script type="module">
+import { setupWalletSelector } from "https://esm.sh/@near-wallet-selector/core@10.1.4";
+import { setupMeteorWallet } from "https://esm.sh/@near-wallet-selector/meteor-wallet@10.1.4";
+import { setupMyNearWallet } from "https://esm.sh/@near-wallet-selector/my-near-wallet@10.1.4";
+let selector = null;
+async function getSelector() {
+  if (selector) return selector;
+  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMyNearWallet()] });
+  return selector;
 }
-async function refreshWalletUI(){
-  const st=document.getElementById("walletStatus"), form=document.getElementById("mintForm"), outBtn=document.getElementById("walletOutBtn");
-  if(nearWallet && nearWallet.isSignedIn()){
-    const id=nearWallet.getAccountId();
-    st.textContent="Connected as "+id+" (testnet).";
-    form.style.display="block"; outBtn.style.display="inline-block";
-    document.getElementById("walletBtn").textContent="Connected";
-    try{ nearAccount=await nearWallet.account(); }catch{}
-  } else {
-    st.textContent="Not connected."; form.style.display="none"; outBtn.style.display="none";
-    document.getElementById("walletBtn").textContent="Connect testnet wallet";
-  }
+function setStatus(t) { document.getElementById("walletStatus").textContent = t; }
+async function refresh() {
+  try {
+    const s = await getSelector();
+    const acct = (s.store.getState().accounts[0] || {}).accountId;
+    const form = document.getElementById("mintForm"), outBtn = document.getElementById("walletOutBtn");
+    if (acct) {
+      setStatus("Connected as " + acct + " (testnet).");
+      form.style.display = "block"; outBtn.style.display = "inline-block";
+      document.getElementById("walletBtn").textContent = "Connected";
+    } else {
+      setStatus("Not connected.");
+      form.style.display = "none"; outBtn.style.display = "none";
+      document.getElementById("walletBtn").textContent = "Connect Meteor wallet";
+    }
+  } catch (e) { setStatus("Wallet failed to load: " + e.message + " — use the CLI instead."); }
 }
-document.getElementById("walletBtn").onclick=async()=>{
-  try{
-    if(!nearWallet) nearWallet=await initWallet();
-    if(!nearWallet) return;
-    if(nearWallet.isSignedIn()){ await refreshWalletUI(); return; }
-    await nearWallet.requestSignIn("nft.primitives.testnet");
-  }catch(e){ document.getElementById("walletStatus").textContent="Connect failed: "+e.message; }
+async function connect(walletId) {
+  try {
+    setStatus("Connecting… (in the Meteor app this stays in-app — no website redirect)");
+    const s = await getSelector();
+    const w = await s.wallet(walletId);
+    await w.signIn({ contractId: "nft.primitives.testnet", methodNames: ["nft_mint"] });
+    await refresh();
+  } catch (e) { setStatus("Connect failed: " + e.message); }
+}
+document.getElementById("walletBtn").onclick = () => connect("meteor-wallet");
+document.getElementById("walletMyNearBtn").onclick = () => connect("my-near-wallet");
+document.getElementById("walletOutBtn").onclick = async () => {
+  try { const s = await getSelector(); const w = await s.wallet(); await w.signOut(); } catch {}
+  await refresh();
 };
-document.getElementById("walletOutBtn").onclick=async()=>{ if(nearWallet) nearWallet.signOut(); nearAccount=null; await refreshWalletUI(); };
-document.getElementById("mintBtn").onclick=async()=>{
-  const out=document.getElementById("mintOut");
-  try{
-    if(!nearWallet || !nearWallet.isSignedIn()){ out.textContent="Connect a wallet first."; return; }
-    const tokenId=document.getElementById("mintToken").value.trim();
-    const title=document.getElementById("mintTitle").value.trim();
-    const gen=document.getElementById("mintGen").value.trim();
-    const parent=document.getElementById("mintParent").value.trim();
-    if(!tokenId){ out.textContent="Enter a token id."; return; }
-    out.textContent="Waiting for your signature in the wallet…";
-    const account=await nearWallet.account();
-    const res=await account.functionCall({ contractId:"nft.primitives.testnet", methodName:"nft_mint", args:{ token_id:tokenId, receiver_id:nearWallet.getAccountId(), token_metadata:{ title:title, description:"Genesis agent, generation "+gen+", parent "+parent+".", media:"", extra:JSON.stringify({ generation:gen, parent:parent, status:"alive" }) } }, gas:"300000000000000", attachedDeposit:nearApi.utils.format.parseNearAmount("0.1") });
-    out.textContent="Minted! Transaction: "+(res.transaction && res.transaction.hash ? res.transaction.hash : JSON.stringify(res).slice(0,300))+"\nToken: "+tokenId+" — check it with: node src/cli.js token "+tokenId;
-  }catch(e){ out.textContent="Mint failed: "+e.message; }
+document.getElementById("mintBtn").onclick = async () => {
+  const out = document.getElementById("mintOut");
+  try {
+    const s = await getSelector();
+    const acct = (s.store.getState().accounts[0] || {}).accountId;
+    if (!acct) { out.textContent = "Connect a wallet first."; return; }
+    const tokenId = document.getElementById("mintToken").value.trim();
+    const title = document.getElementById("mintTitle").value.trim();
+    const gen = document.getElementById("mintGen").value.trim();
+    const parent = document.getElementById("mintParent").value.trim();
+    if (!tokenId) { out.textContent = "Enter a token id."; return; }
+    out.textContent = "Waiting for your signature in the wallet…";
+    const w = await s.wallet();
+    const res = await w.signAndSendTransaction({ receiverId: "nft.primitives.testnet", actions: [{ type: "FunctionCall", params: { methodName: "nft_mint", args: { token_id: tokenId, receiver_id: acct, token_metadata: { title: title, description: "Genesis agent, generation " + gen + ", parent " + parent + ".", media: "", extra: JSON.stringify({ generation: gen, parent: parent, status: "alive" }) } }, gas: BigInt("300000000000000"), deposit: BigInt("100000000000000000000000") } }] });
+    const hash = (res && res.transaction && res.transaction.hash) || (res && res.transaction_outcome && res.transaction_outcome.id) || "";
+    out.textContent = "Minted! Transaction: " + hash + "\nToken: " + tokenId + " — check it with: node src/cli.js token " + tokenId;
+  } catch (e) { out.textContent = "Mint failed: " + e.message; }
 };
-initWallet().then(async w=>{ nearWallet=w; await refreshWalletUI(); }).catch(()=>{});
+refresh();
 </script>
 </body>
 </html>
