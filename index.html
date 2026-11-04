@@ -339,8 +339,16 @@ async function refresh() {
     const form = document.getElementById("mintForm"), outBtn = document.getElementById("walletOutBtn");
     window.__genesisAccount = acct || "";
     if (acct) {
-      setStatus("Connected as " + acct + " (testnet).");
-      form.style.display = "block"; outBtn.style.display = "inline-block";
+      if (acct.endsWith(".testnet")) {
+        setStatus("Connected as " + acct + " (testnet).");
+        form.style.display = "block";
+      } else {
+        // A mainnet (.near) account does not exist on testnet, so minting
+        // with it would fail. Say so plainly instead of showing the mint form.
+        setStatus("Connected as " + acct + " — but this is a MAINNET account, and Genesis runs on TESTNET only. Switch Meteor to testnet, use a .testnet account, then disconnect and reconnect here. Do not mint with this account.");
+        form.style.display = "none";
+      }
+      outBtn.style.display = "inline-block";
       document.getElementById("walletBtn").textContent = "Connected";
     } else {
       setStatus("Not connected.");
