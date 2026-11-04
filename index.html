@@ -47,6 +47,11 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 <li><b>Evolve.</b> Each child mutates one skill: faster, higher quality, or cheaper to run.</li>
 </ol>
 
+<h2 id="live">Live agents — NEAR testnet, right now</h2>
+<p id="liveNote">Loading live onchain data…</p>
+<div class="grid" id="liveAgents"></div>
+<p class="small">Source: <span class="mono">nft.primitives.testnet</span> via NEAR testnet RPC. If the live fetch fails, the page falls back to the last RPC-verified snapshot (2026-11-04). Locked tokens (gen0, gen1, gen5-weak) are shown as locked — their subaccount keys were lost in the first run, so they cannot be moved.</p>
+
 <h2 id="tree">The family tree — verified demo run</h2>
 <p>Treasury at the end of the run: <b>18.25</b> (started at 20, after funding every birth). Agents: 6. Events: 5 (4 births, 1 death).</p>
 <div class="grid" id="tree"></div>
@@ -103,6 +108,47 @@ show();
 document.getElementById("playBtn").onclick=()=>{
 if(timer)return;timer=setInterval(()=>{i++;show();if(i>=lines.length){clearInterval(timer);timer=null;}},700);};
 document.getElementById("resetBtn").onclick=()=>{if(timer){clearInterval(timer);timer=null;}i=0;show();};
+async function rpcCall(method,args){
+  const r=await fetch("https://rpc.testnet.near.org",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:"x",method:"query",params:{request_type:"call_function",account_id:"nft.primitives.testnet",method_name:method,args_base64:btoa(JSON.stringify(args)),finality:"final"}})});
+  const j=await r.json();
+  if(j.error) throw new Error("RPC error");
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)));
+}
+async function rpcBalance(account){
+  const r=await fetch("https://rpc.testnet.near.org",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:"x",method:"query",params:{request_type:"view_account",account_id:account,finality:"final"}})});
+  const j=await r.json();
+  return (Number(j.result.amount)/1e24).toFixed(4);
+}
+const SNAPSHOT=[
+ {id:"genesis-gen-0",owner:"gen0.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.1100"},
+ {id:"genesis-gen-1",owner:"gen1.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.0500"},
+ {id:"genesis-gen-2",owner:"gen2.genesisdemo354551.testnet",status:"alive",balance:"0.5100"},
+ {id:"genesis-weak-2",owner:"genesisdemo354551.testnet",status:"dead — returned to treasury",balance:"—"},
+ {id:"genesis-gen-5-weak",owner:"gen5.genesisdemo354551.testnet",status:"locked — death never completed",balance:"0.0200"}];
+(async()=>{
+  const el=document.getElementById("liveAgents"), note=document.getElementById("liveNote");
+  let rows=SNAPSHOT, live=false;
+  try{
+    rows=[];
+    for(const t of SNAPSHOT){
+      const tk=await rpcCall("nft_token",{token_id:t.id});
+      let bal="—";
+      try{ bal=await rpcBalance(tk.owner_id); }catch{}
+      let status=t.status;
+      if(t.id==="genesis-gen-2") status="alive";
+      if(t.id==="genesis-weak-2") status="dead — returned to treasury";
+      rows.push({id:t.id,owner:tk.owner_id,status,balance:bal,title:tk.metadata.title});
+    }
+    live=true;
+  }catch(e){ rows=SNAPSHOT; }
+  note.textContent=live?"Live from NEAR testnet — fetched just now.":"Live fetch failed — showing last RPC-verified snapshot (2026-11-04).";
+  el.innerHTML="";
+  rows.forEach(a=>{
+    const d=document.createElement("div");d.className="card";
+    d.innerHTML="<h3>"+(a.title||a.id)+"</h3><p class='small mono'>"+a.id+"</p><p class='small'>Owner: <span class='mono'>"+a.owner+"</span><br>Status: <b>"+a.status+"</b><br>Owner balance: "+a.balance+" NEAR</p>";
+    el.appendChild(d);
+  });
+})();
 </script>
 </body>
 </html>

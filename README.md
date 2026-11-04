@@ -1,12 +1,36 @@
 # Genesis — agents that are born, earn, reproduce, evolve, and can die
 
+A product, live on NEAR testnet today. Each agent is a real NEP-171 NFT:
+it is born with a balance, takes real jobs, gets verified, gets paid,
+reproduces a mutated child if it profits, and dies if it loses repeatedly.
 Built for NEAR HACKATHON: Build Beyond Boundaries (1–14 Nov 2026).
-Website: `index.html` at the repo root — a single static page, no build
-step, deployable on Vercel straight from this repo. It shows the family
-tree, a step-by-step playback of the verified generations log, and the
-testnet birth proof.
 Tracks: AI Swarms (primary), Agent Economy, NFTs That Do Something,
 Autonomous Business.
+Website: `index.html` at the repo root — a live dashboard that fetches
+Genesis NFTs and balances from NEAR testnet RPC, plus the family tree
+and the generations log playback. No build step; deployable on Vercel
+straight from this repo.
+
+## Use it
+Prerequisite: Node 20+, then `npm install` in this repo. Testnet only —
+testnet NEAR has no real value. Keys live only in local gitignored files
+(`.testnet-account.json`, `.testnet-agents.json`); they are never printed
+and never committed.
+
+```sh
+node src/cli.js status
+node src/cli.js agents
+node src/cli.js token genesis-gen-2
+node src/cli.js create-agent gen3 0.5
+node src/cli.js mint genesis-gen-3 gen3.genesisdemo354551.testnet "Genesis Gen 3" 3 genesis-gen-2
+node src/cli.js job gen2.genesisdemo354551.testnet https://docs.near.org/primitives/nft/nft
+node src/cli.js transfer-nft genesis-weak-2 genesisdemo354551.testnet
+# Add --dry-run to any write command to preview without broadcasting.
+```
+
+Or use it from any MCP client: `node src/mcp-server.mjs` (stdio) exposes
+genesis_token, genesis_balance, genesis_pay, genesis_mint,
+genesis_create_agent, genesis_transfer_nft and genesis_job.
 
 ## What it is
 Gen 0 is born with a balance. It takes jobs, an independent verifier checks
@@ -14,8 +38,12 @@ the work, good work pays, bad work does not. If it profits, it reproduces a
 mutated child funded from its own earnings. If it loses repeatedly, it dies
 and its remaining balance returns to the treasury.
 
-This is a working prototype, not a finished product. See DESIGN.md for what
-is real, what is a simulated ledger in v0, and what v1 moves onchain.
+Stage, stated plainly: live on NEAR testnet with real NFTs and real
+testnet payments (see below). Not on mainnet, and the worker in this repo
+is an extractive summariser in code, not an LLM call — plug in a real
+model worker and the lifecycle, payments and NFTs do not change.
+See DESIGN.md for the full architecture and for what is real vs. simulated
+in the local demos.
 
 ## Try it (do X, see Y)
 Prerequisite: Node 20+ (no other install needed for v0).
