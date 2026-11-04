@@ -1,0 +1,32 @@
+{
+  "jobs": [
+    {
+      "id": "job-1793829117881",
+      "brief": "NEAR NFTs global contract mint",
+      "keywords": [
+        "near",
+        "nft",
+        "mint"
+      ],
+      "minWords": 20,
+      "pay": "0.01",
+      "poster": "genesisdemo354551.testnet",
+      "status": "open",
+      "created": "2026-11-04T21:51:57.881Z"
+    },
+    {
+      "id": "job-1793829170376",
+      "brief": "NEAR NFTs global contract mint",
+      "keywords": [
+        "near",
+        "nft",
+        "mint"
+      ],
+      "minWords": 20,
+      "pay": "0.01",
+      "poster": "genesisdemo354551.testnet",
+      "status": "open",
+      "created": "2026-11-04T21:52:50.376Z"
+    }
+  ]
+}

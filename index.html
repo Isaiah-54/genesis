@@ -96,7 +96,7 @@ Full steps are in the README on GitHub, written as do X, see Y.</p>
 </div>
 
 <h2>Honest limits</h2>
-<p>Live on NEAR <b>testnet</b>, not mainnet. The worker in this repo is an extractive summariser in code, not an LLM call — plug in a real model worker and the lifecycle, payments and NFTs do not change. NFTs live on the shared testnet contract, not a Genesis-owned contract. Three early tokens (gen0, gen1, gen5-weak) are locked because their subaccount keys were lost in the first run. No cross-chain earning yet — Chain Signatures and Intents are the stretch goal, and this page will say exactly which chains are covered when they land.</p>
+<p>Live on NEAR <b>testnet</b>, not mainnet. The worker is now a real model call (a configured OpenAI-compatible endpoint if set, otherwise the public Pollinations text API) — if both fail it falls back to the repo's extractive summariser, labelled as such, never claimed as LLM work. First real-LLM job paid onchain 2026-11-04: gen2, 50 words, 3/3 keywords, payment tx <span class="mono">3363d35e…</span>. NFTs live on the shared testnet contract, not a Genesis-owned contract. Three early tokens (gen0, gen1, gen5-weak) are locked because their subaccount keys were lost in the first run. No cross-chain earning yet — Chain Signatures and Intents are the stretch goal, and this page will say exactly which chains are covered when they land.</p>
 </main>
 <footer>
 <p class="small">Genesis — built for NEAR HACKATHON: Build Beyond Boundaries, 1–14 Nov 2026. Code: <a href="https://github.com/Isaiah-54/genesis">github.com/Isaiah-54/genesis</a></p>
@@ -141,7 +141,8 @@ async function rpcBalance(account){
 const SNAPSHOT=[
  {id:"genesis-gen-0",owner:"gen0.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.1100",traits:"gen 0 · parent treasury · speed 1 · quality 1 · costEff 1"},
  {id:"genesis-gen-1",owner:"gen1.genesisdemo354551.testnet",status:"locked — key lost",balance:"0.0500",traits:"gen 1 · parent genesis-gen-0 · speed 1 · quality 0.95 · costEff 1.2"},
- {id:"genesis-gen-2",owner:"gen2.genesisdemo354551.testnet",status:"alive",balance:"0.5100",traits:"gen 2 · parent genesis-gen-1 · speed 1.2 · quality 0.95 · costEff 1.15"},
+ {id:"genesis-gen-2",owner:"gen2.genesisdemo354551.testnet",status:"alive",balance:"0.5400",traits:"gen 2 · parent genesis-gen-1 · speed 1.2 · quality 0.95 · costEff 1.15"},
+ {id:"genesis-gen-3",owner:"gen3.genesisdemo354551.testnet",status:"alive",balance:"0.5100",traits:"gen 3 · parent genesis-gen-2"},
  {id:"genesis-weak-2",owner:"genesisdemo354551.testnet",status:"dead — returned to treasury",balance:"—",traits:"gen 0 · parent treasury · speed 0.5 · quality 0.2 · costEff 0.8"},
  {id:"genesis-gen-5-weak",owner:"gen5.genesisdemo354551.testnet",status:"locked — death never completed",balance:"0.0200",traits:"gen 0 · parent treasury · speed 0.5 · quality 0.2 · costEff 0.8"}];
 (async()=>{
@@ -157,10 +158,14 @@ const SNAPSHOT=[
       let traits=t.traits, status=t.status;
       try{
         const ex=JSON.parse(tk.metadata.extra||"{}");
-        if(ex.generation!==undefined) traits="gen "+ex.generation+" · parent "+ex.parent+" · speed "+ex.speed+" · quality "+ex.quality+" · costEff "+ex.costEff;
+        if(ex.generation!==undefined){
+          traits="gen "+ex.generation+" · parent "+ex.parent;
+          if(ex.speed!==undefined) traits+=" · speed "+ex.speed+" · quality "+ex.quality+" · costEff "+ex.costEff;
+        }
         if(ex.status) status=ex.status;
       }catch{}
       if(t.id==="genesis-gen-2") status="alive";
+      if(t.id==="genesis-gen-3") status="alive";
       if(t.id==="genesis-weak-2") status="dead — returned to treasury";
       if(t.id==="genesis-gen-5-weak") status="locked — death never completed";
       rows.push({id:t.id,owner:tk.owner_id,status,balance:bal,title:tk.metadata.title,traits});

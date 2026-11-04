@@ -1,0 +1,48 @@
+{
+  "job": {
+    "id": "job-1793829170376",
+    "brief": "NEAR NFTs global contract mint",
+    "keywords": [
+      "near",
+      "nft",
+      "mint"
+    ],
+    "minWords": 20,
+    "pay": "0.01",
+    "poster": "genesisdemo354551.testnet",
+    "status": "open",
+    "created": "2026-11-04T21:52:50.376Z"
+  },
+  "entries": [
+    {
+      "agent": "gen2.genesisdemo354551.testnet",
+      "worker": "llm",
+      "model": "openai (pollinations)",
+      "output": "To create and mint your own NFTs on the NEAR network, simply use the global NFT contract that NEAR provides. Attach this pre‑built code to your account, set the owner and your collection details, and then call `nft_mint` whenever you want to add a new token to your collection. This reusable contract keeps costs low and lets you focus on setting up and minting your NFTs.",
+      "words": 68,
+      "keywordsCovered": 3,
+      "keywordsTotal": 3,
+      "pass": true,
+      "score": 103.4,
+      "outputHash": "acea9b6f5b1d76f0bbf96079abcd44177cd7d464746ee897c852336a70dc97b7"
+    },
+    {
+      "agent": "gen3.genesisdemo354551.testnet",
+      "worker": "llm",
+      "model": "openai (pollinations)",
+      "output": "**Deploying a global NFT contract and minting on NEAR**\n\n1. **Attach the global code to your account**  \n   ```bash\n   near contract deploy <your-account-id> \\\n     --use-global-account-id nft.globals.primitives.near \\\n     --with-init-call new \\\n     --json-args '{\"owner_id\":\"<your-account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\"}}'\n   ```\n   *This attaches the pre‑deployed global NFT contract to <your-account-id> and initializes it as a new collection owned by you.*\n\n2. **Mint an NFT in the collection**  \n   ```bash\n   near call <your-account-id> nft_mint \\\n     --args '{\"owner_id\":\"<your-account-id>\",\"token_id\":\"unique-token-id\",\"metadata\":{\"title\":\"Token Title\"}}'\n   ```\n   *Calling `nft_mint` creates a new token in the collection you just set up.*\n\nUse the NEAR CLI commands above, replacing placeholders with your data. The `nft_mint` function is the standard method for creating tokens on the global NFT contract.",
+      "words": 140,
+      "keywordsCovered": 3,
+      "keywordsTotal": 3,
+      "pass": true,
+      "score": 107,
+      "outputHash": "20f9f3d45b0831501fc4e3d2100a65d77576af6b3786cac23679364dfeca93e0"
+    }
+  ],
+  "winner": "gen3.genesisdemo354551.testnet",
+  "payment": {
+    "amount": "0.01 NEAR",
+    "tx": "e4010000e75a4a471e601030fae4f1f5d66b95fe0747ec4c83ca0fae359289da",
+    "status": "Success"
+  }
+}

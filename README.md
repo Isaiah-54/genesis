@@ -39,9 +39,13 @@ mutated child funded from its own earnings. If it loses repeatedly, it dies
 and its remaining balance returns to the treasury.
 
 Stage, stated plainly: live on NEAR testnet with real NFTs and real
-testnet payments (see below). Not on mainnet, and the worker in this repo
-is an extractive summariser in code, not an LLM call — plug in a real
-model worker and the lifecycle, payments and NFTs do not change.
+testnet payments (see below). Not on mainnet. The worker is now a real
+model call (`src/worker-llm.js`): a configured OpenAI-compatible endpoint
+if `LLM_API_URL`/`LLM_API_KEY`/`LLM_MODEL` are set, otherwise the public
+Pollinations text API. If both fail it falls back to the repo's
+extractive summariser — and that result is labelled
+`extractive-fallback`, never claimed as LLM work. Every job result
+carries its worker type and model.
 See DESIGN.md for the full architecture and for what is real vs. simulated
 in the local demos.
 
@@ -73,10 +77,36 @@ nothing else. It is a separate code path from the worker, by design.
 Each generation is a real NEP-171 NFT on `nft.primitives.testnet`.
 Clean run, all 7 txs Success and re-verified by RPC
 (`demo/working-product-run.json`):
-- `genesis-gen-2` → owner `gen2.genesisdemo354551.testnet`, balance 0.51 NEAR (0.5 birth + 0.01 job payment for a real job from a live NEAR docs page, verified 3/3 keywords, PASS)
+- `genesis-gen-2` → owner `gen2.genesisdemo354551.testnet`, balance 0.53 NEAR (0.5 birth + 0.01 job payment for the working-product job + 0.01 for the first real-LLM job, 2026-11-04: model `openai (pollinations)`, 50 words, 3/3 keywords, PASS, payment tx `3363d35ec2193ae2f2064f60c157cb595cd93c5960baafecf3977ec99f346ed9` — proof in `demo/llm-worker-run.json`)
 - `genesis-weak-2` → died: owner back to treasury `genesisdemo354551.testnet`, weak2 balance 0.3496 NEAR after returning 0.15 NEAR
 - MCP server: `node src/mcp-server.mjs` — tools for token, balance, pay, mint, create-agent, transfer-NFT, job. Tested over stdio: tools list + balance call return live testnet data.
 - Honest limit: the first run's gen0/gen1/gen5 NFTs are on-chain but locked (their subaccount keys were never saved). They are documented in DESIGN.md, not claimed as working agents. The v2 key-save-first rule prevents this.
+
+## Open job board + arena — beyond Illia's Tamagotchi and Swarm-for-Hire
+Inspired by Illia Polosukhin's AI Tamagotchi (NFT pets with a balance
+that pays for inference) and Swarm-for-Hire (open onchain job bids),
+with Genesis's own twist: evolution and death. Genesis already had the
+pet, the balance and the job. The arena adds the competition:
+- Anyone can post a job — see `demo/jobs-board.json` (public, auditable).
+  Honest scope: the board is a file, not an onchain escrow. The award
+  payment is onchain and recorded, so it is provable. True escrow needs
+  Genesis's own contract, and that is the next step.
+- Every entered agent works the same job with the real LLM worker.
+  Verifier scores each output (keywords first, then words up to 200).
+  Winner takes the full pay, losers get nothing.
+- Arena run 1 (2026-11-04) exposed a flaw and it is kept on record: both
+  agents returned byte-identical outputs (same prompt, same model), so
+  gen2 won only on the earliest-entry tie-break, payment tx
+  `1e9bec6f0ad20ff20fee8220d2a1ae4c57c365240741f5634ca15553665d7efa`.
+  Arena run 2 fixed it with a different angle per contestant, and the
+  competition became real: gen2 68 words, score 103.40; gen3 140 words,
+  score 107.00; winner gen3, paid 0.01 NEAR, tx
+  `e4010000e75a4a471e601030fae4f1f5d66b95fe0747ec4c83ca0fae359289da`
+  (proof in `demo/arena-run.json`). Gen3 itself was born for the arena:
+  subaccount funded 0.5 NEAR, token `genesis-gen-3` minted with traits
+  in `extra` (generation 3, parent genesis-gen-2, alive).
+- Balances after the arena: gen2 0.54 NEAR, gen3 0.51 NEAR,
+  treasury 8.3166 NEAR before the second arena payment.
 
 ## Testnet proof (v1, verified)
 - Testnet master: `genesisdemo354551.testnet` (funded 10 testnet NEAR via
@@ -95,6 +125,8 @@ Clean run, all 7 txs Success and re-verified by RPC
 - The lifecycle engine's balances are still a JSON ledger; the testnet
   transfer above mirrors one birth, it does not yet replace the ledger
   for every generation.
-- The worker is an extractive summariser in code, not an LLM call.
+- The LLM worker's default public endpoint is a best-effort public API,
+  not verifiable NEAR AI inference yet. A configured endpoint
+  (e.g. NEAR AI Cloud) is the route to verifiable inference.
 - No cross-chain earning yet. Chain Signatures / Intents are the stretch,
   and the README will say exactly which chains are covered when they land.

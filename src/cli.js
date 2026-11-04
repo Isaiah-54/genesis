@@ -17,9 +17,10 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = require('near-api-js');
 const { work, verify } = require('./engine');
+const { workLLM } = require('./worker-llm');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
-const TOKENS = ['genesis-gen-0', 'genesis-gen-1', 'genesis-gen-2', 'genesis-weak-2', 'genesis-gen-5-weak'];
+const TOKENS = ['genesis-gen-0', 'genesis-gen-1', 'genesis-gen-2', 'genesis-gen-3', 'genesis-weak-2', 'genesis-gen-5-weak'];
 function rpc(method, params) {
   const payload = JSON.stringify({ jsonrpc: '2.0', id: 'x', method, params });
   const out = execSync(`curl -s -m 60 https://rpc.testnet.near.org -H 'Content-Type: application/json' -d '${payload}'`, { maxBuffer: 4 * 1024 * 1024 });
@@ -120,11 +121,14 @@ async function main() {
     return;
   }
   if (cmd === 'job') {
-    const page = execSync(`curl -s -m 30 ${a[2]} | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
+    const page = execSync(`curl -s -m 30 ${a[2]} | perl -0777 -pe 's/<script.*?<\\/script>//gs; s/<style.*?<\\/style>//gs' | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
     if (page.length < 500) throw new Error('Fetched page too short for a real job');
     const job = { brief: 'NEAR NFTs global contract mint', minWords: 20, keywords: ['near', 'nft', 'mint'], text: page.slice(0, 3000) };
-    const output = work(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
+    const llm = await workLLM(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
+    const output = llm.output;
     const v = verify(job, output);
+    console.log('Worker:', llm.worker, '| model:', llm.model);
+    console.log('Output preview:', output.slice(0, 300));
     console.log('Verify:', v.pass ? 'PASS' : 'FAIL', v.words, 'words,', `${v.keywordsCovered}/${v.keywordsTotal}`, 'keywords');
     if (!v.pass) { console.log('No payment — job failed verification.'); return; }
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: a[1], actions: [transactions.transfer(utils.format.parseNearAmount('0.01'))], dryRun, label: 'job payment to ' + a[1] }));
