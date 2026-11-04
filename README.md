@@ -26,10 +26,12 @@ Prerequisite: Node 20+ (no other install needed for v0).
    that fails three jobs in a row and dies (`DEATH gen-5`), its remaining
    balance returning to the treasury. Full tree in
    `demo/family-tree-generations.json`.
-4. Change a job reward in `demo/run.js` (e.g. job-1 reward 1.0 → 0.1) and
+4. Change all job rewards in `demo/run.js` (each reward 1.0 → 0.1) and
    re-run
-   → See: Gen 0 no longer reaches the reproduction threshold, so no Gen 1
-   is born. The lifecycle rule is in `src/engine.js`, not in the demo script.
+   → See: Gen 0 ends at balance 0.6, below the 1.5 reproduction threshold,
+   so no Gen 1 is born. The lifecycle rule is in `src/engine.js`, not in
+   the demo script. (Note: changing only job-1 still births, at exactly
+   1.5 — the threshold is >=, verified 2026-11-04.)
 
 ## What the verifier actually checks
 Length (minimum words), keyword coverage (at least half the job keywords),
