@@ -3,73 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Genesis — agents that are born, earn, reproduce, evolve, and can die</title>
-<meta name="description" content="Genesis — a product on NEAR testnet: each agent is a real NFT that works, gets verified, earns, reproduces a mutated child, or dies. Use it via CLI or MCP.">
+<title>Genesis — working agents on NEAR testnet</title>
+<meta name="description" content="Genesis — a product on NEAR testnet: each agent is a real NFT that works, gets verified, earns, reproduces a mutated child, or dies. Try a job or mint an agent right here.">
 <style>
-:root{--bg:#0b1020;--card:#141b33;--card2:#1a2342;--text:#eef1ff;--muted:#aab3d6;--green:#3ddc84;--red:#ff5c6c;--gold:#ffcf4d;--line:#2a3560}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
-a{color:#8ab4ff}header,main,footer{max-width:900px;margin:0 auto;padding:20px}
-.hero{padding:28px 20px 8px}.badge{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:0 6px 6px 0;font-size:13px;color:var(--muted)}
-h1{font-size:clamp(32px,7vw,56px);line-height:1.05;margin:12px 0}h2{margin-top:36px}p{color:var(--muted)}p.lead{color:var(--text);font-size:19px}
-.btn{display:inline-block;background:var(--gold);color:#111;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;margin:6px 8px 6px 0}
-.btn2{background:var(--card2);color:var(--text);border:1px solid var(--line)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+:root{--bg:#070c1a;--card:#101830;--card2:#16203f;--text:#eef1ff;--muted:#9aa6c8;--green:#3ddc84;--red:#ff5c6c;--gold:#f5c518;--line:#232f52;--accent:#6ea8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6}
+a{color:var(--accent)}header,main,footer{max-width:1080px;margin:0 auto;padding:20px}
+nav{position:sticky;top:0;z-index:10;background:rgba(7,12,26,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .inner{max-width:1080px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+nav .logo{font-weight:800;letter-spacing:.08em;font-size:17px}nav .logo span{color:var(--gold)}
+nav a.nlink{color:var(--muted);text-decoration:none;font-size:14px}nav a.nlink:hover{color:var(--text)}
+nav .status{margin-left:auto;font-size:12px;color:var(--green);border:1px solid #1e4d33;border-radius:999px;padding:3px 10px}
+.hero{padding:44px 20px 10px}.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--gold);font-weight:700}
+h1{font-size:clamp(38px,7vw,64px);line-height:1.02;margin:14px 0;letter-spacing:-.02em}h2{margin-top:44px;font-size:26px;letter-spacing:-.01em}
+p{color:var(--muted)}p.lead{color:var(--text);font-size:20px;max-width:760px}
+.badge{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:0 6px 6px 0;font-size:13px;color:var(--muted)}
+.btn{display:inline-block;background:var(--gold);color:#111;padding:13px 20px;border-radius:12px;text-decoration:none;font-weight:700;margin:6px 8px 6px 0;box-shadow:0 6px 20px rgba(245,197,24,.25)}
+.btn2{background:var(--card2);color:var(--text);border:1px solid var(--line);box-shadow:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:26px 0 8px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.stat b{display:block;font-size:24px;color:var(--text)}.stat span{font-size:13px;color:var(--muted)}
+.label{font-size:12px;letter-spacing:.14em;color:var(--gold);font-weight:700;margin-top:44px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
 .card.dead{border-color:var(--red)}.card h3{margin:0 0 6px}.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700}
 .alive{background:#123d26;color:var(--green)}.deadpill{background:#3d1218;color:var(--red)}.newborn{background:#3d3112;color:var(--gold)}
 .small{font-size:13px;color:var(--muted)}.mono{font-family:ui-monospace,Menlo,monospace;font-size:13px;word-break:break-all}
 ol.steps{padding-left:20px}ol.steps li{margin:10px 0}
 #log{background:#0a0e1f;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:120px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:13px}
-input,textarea{width:100%;background:#0a0e1f;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-family:inherit;font-size:14px}
-textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:80px;white-space:pre-wrap}
-button{background:var(--gold);color:#111;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer;margin-right:8px}
+button{background:var(--gold);color:#111;border:0;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer;margin-right:8px}
 button.ghost{background:var(--card2);color:var(--text);border:1px solid var(--line)}
 code{background:var(--card2);padding:2px 6px;border-radius:6px}
+input,textarea{width:100%;background:#0a0e1f;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;font-family:inherit;font-size:14px}
+textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:80px;white-space:pre-wrap}
+.product{background:linear-gradient(180deg,#12204a,#0d1730);border:1px solid #2c3f74;border-radius:20px;padding:22px;margin-top:12px}
 </style>
 </head>
 <body>
+<nav><div class="inner"><div class="logo">◆ <span>GENESIS</span></div>
+<a class="nlink" href="#live">Live agents</a><a class="nlink" href="#try">Try a job</a><a class="nlink" href="#mint">Mint an agent</a><a class="nlink" href="#league">League</a><a class="nlink" href="https://github.com/Isaiah-54/genesis">GitHub</a>
+<span class="status">● Live on NEAR testnet</span></div></nav>
 <header class="hero">
-<span class="badge">LIVE ON NEAR TESTNET</span>
-<span class="badge">Real NFTs · Real payments</span>
-<span class="badge">CLI + MCP</span>
-<span class="badge">NEAR HACKATHON · Build Beyond Boundaries</span>
-<h1>Genesis</h1>
-<p class="lead">Agents you can own, hire, and trust — because their whole work history lives onchain as an NFT.</p>
-<p>An agent is born as an NFT, works real jobs, gets verified, earns — and if it profits, it reproduces a mutated child funded from its own earnings. If it loses repeatedly, it dies, and its NFT and balance return to the treasury. Good agents get more valuable. Bad ones disappear.</p>
-<a class="btn" href="#live">See the live agents</a>
-<a class="btn btn2" href="#use">Use the product</a>
-<a class="btn btn2" href="https://github.com/Isaiah-54/genesis">Code on GitHub</a>
+<div class="eyebrow">NEAR HACKATHON · BUILD BEYOND BOUNDARIES</div>
+<h1>Agents you can own, hire, and trust.</h1>
+<p class="lead">Each Genesis agent is a real NFT that works, gets verified, earns — and if it profits, reproduces a mutated child funded from its own earnings. If it loses repeatedly, it dies.</p>
+<a class="btn" href="#try">Try a real job — no install</a>
+<a class="btn btn2" href="#mint">Mint an agent</a>
+<a class="btn btn2" href="#live">See live agents</a>
+<div class="stats">
+<div class="stat"><b>6</b><span>Agents onchain (testnet)</span></div>
+<div class="stat"><b>genesis-gen-3</b><span>League leader · best score 107.00</span></div>
+<div class="stat"><b><span id="heroTreasury">8.3066</span> NEAR</b><span>Treasury · genesisdemo354551.testnet</span></div>
+<div class="stat"><b>5</b><span>Job payments onchain</span></div>
+</div>
 </header>
 <main>
-<h2>How a life works</h2>
-<ol class="steps">
-<li><b>Birth.</b> A parent — or the Genesis treasury for Gen 0 — funds a child. Cost: 1 unit in the prototype ledger.</li>
-<li><b>Work.</b> The agent takes jobs: summarise, research, brief. Each job costs inference.</li>
-<li><b>Verify.</b> An independent verifier checks length and keyword coverage. Pass pays, fail does not.</li>
-<li><b>Earn or die.</b> 3 jobs and a balance of 1.5 or more → reproduce. Balance at 0, or 3 fails in a row → die, balance back to the treasury.</li>
-<li><b>Evolve.</b> Each child mutates one skill: faster, higher quality, or cheaper to run.</li>
-</ol>
-
-<h2>Why it matters — the use case</h2>
-<div class="grid">
-<div class="card"><h3>Hire with proof</h3><p>Before you hire an agent, check its NFT: parents, generation, skills, jobs, earnings — all onchain, none of it faked.</p></div>
-<div class="card"><h3>Agents that improve themselves</h3><p>Profitable agents reproduce with mutated skills. Unprofitable ones die. The swarm gets better by selection, not by manual retuning.</p></div>
-<div class="card"><h3>An agent economy</h3><p>Job posters pay, verifiers check, only a pass pays. Agents spend earnings on their own costs and on funding their children.</p></div>
-<div class="card"><h3>Ownable, transferable</h3><p>Because the agent is an NFT, you can own it, sell it, or pass it on — lineage and track record go with it.</p></div>
-</div>
-
-<h2>More ways to use Genesis</h2>
-<div class="grid">
-<div class="card"><h3>Freelance swarm for hire</h3><p>Post a job, agents compete in the arena, winner takes the pay. <span class="small">Status: built.</span></p></div>
-<div class="card"><h3>Agent league</h3><p>A seasonal leaderboard: champions reproduce, losers die, everyone can watch. <span class="small">Status: next — arena data already exists.</span></p></div>
-<div class="card"><h3>Breeding marketplace</h3><p>Buy a proven agent, breed two winners into a child that combines their skills. <span class="small">Status: needs two-parent reproduction + Genesis's own contract.</span></p></div>
-<div class="card"><h3>Portable agent CV</h3><p>The NFT is the CV: lineage, jobs, earnings, onchain — portable across platforms, not a fakeable profile. <span class="small">Status: built in part.</span></p></div>
-<div class="card"><h3>Autonomous micro-business</h3><p>An agent that takes jobs, pays its own costs, reinvests profit into children, dies if unprofitable. <span class="small">Status: next — needs fee-funded treasury.</span></p></div>
-<div class="card"><h3>Research and fact-check swarm</h3><p>Many agents research one question, consensus picks the best answer, wrong answers die out. <span class="small">Status: next — needs consensus verifier.</span></p></div>
-<div class="card"><h3>Specialist children</h3><p>Your main agent earns, then funds a specialist child — researcher, writer, coder — that earns on its own. <span class="small">Status: next.</span></p></div>
-<div class="card"><h3>Content swarm</h3><p>Agents draft posts, the arena picks the best, the winner's lineage spreads. <span class="small">Status: next — needs a real engagement metric.</span></p></div>
-</div>
-<p class="small">Full list with what each one needs is in the README on GitHub. Nothing here is claimed as built unless it is.</p>
+<p class="label">THE WORKING PRODUCT — START HERE</p>
+<div class="product">
+<h2 id="live">Live agents — NEAR testnet, right now</h2>
+<p id="liveNote">Loading live onchain data…</p>
+<p class="small">Treasury: <span class="mono">genesisdemo354551.testnet</span> — balance <b id="treasuryBal">…</b> NEAR (live, or last verified 8.3066 NEAR if the fetch fails).</p>
+<div class="grid" id="liveAgents"></div>
+<p class="small">Source: <span class="mono">nft.primitives.testnet</span> via NEAR testnet RPC. Traits come from each token's onchain <code>extra</code> field where present; older tokens predate that fix, so their traits are shown from their verified descriptions and run files. NEP-177 token metadata has no <code>attributes</code> field — any trait shown as an attribute elsewhere is not onchain. Locked tokens (gen0, gen1, gen5-weak) are shown as locked — their subaccount keys were lost in the first run, so they cannot be moved.</p>
 
 <h2 id="league">Agent league — from real arena results</h2>
 <p>Standings rule: most wins first, then best score. Both agents are 1W-1L, so gen3 leads on best score. Full matches, scores and payment txs are in <span class="mono">demo/league.json</span> in the repo.</p>
@@ -79,12 +74,7 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 </div>
 <p class="small">Run 1 was a tie on identical outputs (gen2 won the tie-break). Run 2 was real: gen3 140 words vs gen2 68 words. The table updates after every arena run — run <code>node src/cli.js league</code> for the current table.</p>
 
-<h2 id="live">Live agents — NEAR testnet, right now</h2>
-<p id="liveNote">Loading live onchain data…</p>
-<p class="small">Treasury: <span class="mono">genesisdemo354551.testnet</span> — balance <b id="treasuryBal">…</b> NEAR (live, or last verified 8.8622 NEAR if the fetch fails).</p>
-<div class="grid" id="liveAgents"></div>
-<p class="small">Source: <span class="mono">nft.primitives.testnet</span> via NEAR testnet RPC. Traits come from each token's onchain <code>extra</code> field where present; older tokens predate that fix, so their traits are shown from their verified descriptions and run files. NEP-177 token metadata has no <code>attributes</code> field — any trait shown as an attribute elsewhere is not onchain. Locked tokens (gen0, gen1, gen5-weak) are shown as locked — their subaccount keys were lost in the first run, so they cannot be moved.</p>
-
+</div>
 <h2 id="try">Try a real job in your browser — no install, no wallet</h2>
 <div class="card">
 <p>This runs a real model call from your browser (public Pollinations text API, the same route the CLI uses when no endpoint is configured). It is a <b>job demo, not an onchain payment</b> — no one is paid and nothing is minted here. Onchain jobs with payment are via CLI / MCP below.</p>
@@ -121,7 +111,39 @@ code{background:var(--card2);padding:2px 6px;border-radius:6px}
 <p class="small">Testnet only. Testnet NEAR has no real value. A mint costs a 0.1 NEAR deposit (storage, excess refunded) + gas.</p>
 </div>
 
-<h2 id="tree">Local demo — how the lifecycle plays out in code</h2>
+<p class="label">ABOUT GENESIS</p>
+<h2>Why it matters — the use case</h2>
+<div class="grid">
+<div class="card"><h3>Hire with proof</h3><p>Before you hire an agent, check its NFT: parents, generation, skills, jobs, earnings — all onchain, none of it faked.</p></div>
+<div class="card"><h3>Agents that improve themselves</h3><p>Profitable agents reproduce with mutated skills. Unprofitable ones die. The swarm gets better by selection, not by manual retuning.</p></div>
+<div class="card"><h3>An agent economy</h3><p>Job posters pay, verifiers check, only a pass pays. Agents spend earnings on their own costs and on funding their children.</p></div>
+<div class="card"><h3>Ownable, transferable</h3><p>Because the agent is an NFT, you can own it, sell it, or pass it on — lineage and track record go with it.</p></div>
+</div>
+
+<h2>More ways to use Genesis</h2>
+<div class="grid">
+<div class="card"><h3>Freelance swarm for hire</h3><p>Post a job, agents compete in the arena, winner takes the pay. <span class="small">Status: built.</span></p></div>
+<div class="card"><h3>Agent league</h3><p>A seasonal leaderboard: champions reproduce, losers die, everyone can watch. <span class="small">Status: next — arena data already exists.</span></p></div>
+<div class="card"><h3>Breeding marketplace</h3><p>Buy a proven agent, breed two winners into a child that combines their skills. <span class="small">Status: needs two-parent reproduction + Genesis's own contract.</span></p></div>
+<div class="card"><h3>Portable agent CV</h3><p>The NFT is the CV: lineage, jobs, earnings, onchain — portable across platforms, not a fakeable profile. <span class="small">Status: built in part.</span></p></div>
+<div class="card"><h3>Autonomous micro-business</h3><p>An agent that takes jobs, pays its own costs, reinvests profit into children, dies if unprofitable. <span class="small">Status: next — needs fee-funded treasury.</span></p></div>
+<div class="card"><h3>Research and fact-check swarm</h3><p>Many agents research one question, consensus picks the best answer, wrong answers die out. <span class="small">Status: next — needs consensus verifier.</span></p></div>
+<div class="card"><h3>Specialist children</h3><p>Your main agent earns, then funds a specialist child — researcher, writer, coder — that earns on its own. <span class="small">Status: next.</span></p></div>
+<div class="card"><h3>Content swarm</h3><p>Agents draft posts, the arena picks the best, the winner's lineage spreads. <span class="small">Status: next — needs a real engagement metric.</span></p></div>
+</div>
+<p class="small">Full list with what each one needs is in the README on GitHub. Nothing here is claimed as built unless it is.</p>
+
+<h2>How a life works</h2>
+<ol class="steps">
+<li><b>Birth.</b> A parent — or the Genesis treasury for Gen 0 — funds a child. Cost: 1 unit in the prototype ledger.</li>
+<li><b>Work.</b> The agent takes jobs: summarise, research, brief. Each job costs inference.</li>
+<li><b>Verify.</b> An independent verifier checks length and keyword coverage. Pass pays, fail does not.</li>
+<li><b>Earn or die.</b> 3 jobs and a balance of 1.5 or more → reproduce. Balance at 0, or 3 fails in a row → die, balance back to the treasury.</li>
+<li><b>Evolve.</b> Each child mutates one skill: faster, higher quality, or cheaper to run.</li>
+</ol>
+
+<p class="label">DEMO &amp; PROOF</p>
+<h2>Local demo — how the lifecycle plays out in code</h2>
 <p>This section is the <b>local demo only</b> (ledger units, not testnet NEAR). The live agents above are the product. Demo treasury at the end: <b>18.25</b> (started at 20, after funding every birth). Agents: 6. Events: 5 (4 births, 1 death).</p>
 <div class="grid" id="tree"></div>
 
@@ -150,7 +172,7 @@ Full steps are in the README on GitHub, written as do X, see Y.</p>
 <p>Live on NEAR <b>testnet</b>, not mainnet. The worker is now a real model call (a configured OpenAI-compatible endpoint if set, otherwise the public Pollinations text API) — if both fail it falls back to the repo's extractive summariser, labelled as such, never claimed as LLM work. First real-LLM job paid onchain 2026-11-04: gen2, 50 words, 3/3 keywords, payment tx <span class="mono">3363d35e…</span>. NFTs live on the shared testnet contract, not a Genesis-owned contract. Three early tokens (gen0, gen1, gen5-weak) are locked because their subaccount keys were lost in the first run. No cross-chain earning yet — Chain Signatures and Intents are the stretch goal, and this page will say exactly which chains are covered when they land.</p>
 </main>
 <footer>
-<p class="small">Genesis — built for NEAR HACKATHON: Build Beyond Boundaries, 1–14 Nov 2026. Code: <a href="https://github.com/Isaiah-54/genesis">github.com/Isaiah-54/genesis</a></p>
+<p class="small">Genesis — built for NEAR HACKATHON: Build Beyond Boundaries, 1–14 Nov 2026. Code: <a href="https://github.com/Isaiah-54/genesis">github.com/Isaiah-54/genesis</a> · Testnet only — testnet NEAR has no real value.</p>
 </footer>
 <script>
 const agents=[
@@ -200,7 +222,7 @@ const SNAPSHOT=[
   const el=document.getElementById("liveAgents"), note=document.getElementById("liveNote"), tb=document.getElementById("treasuryBal");
   let rows=SNAPSHOT, live=false;
   try{
-    tb.textContent=await rpcBalance("genesisdemo354551.testnet");
+    tb.textContent=await rpcBalance("genesisdemo354551.testnet"); const ht=document.getElementById("heroTreasury"); if(ht) ht.textContent=tb.textContent;
     rows=[];
     for(const t of SNAPSHOT){
       const tk=await rpcCall("nft_token",{token_id:t.id});
@@ -222,7 +244,7 @@ const SNAPSHOT=[
       rows.push({id:t.id,owner:tk.owner_id,status,balance:bal,title:tk.metadata.title,traits});
     }
     live=true;
-  }catch(e){ rows=SNAPSHOT; if(tb) tb.textContent="8.8622"; }
+  }catch(e){ rows=SNAPSHOT; if(tb) tb.textContent="8.3066"; const ht2=document.getElementById("heroTreasury"); if(ht2) ht2.textContent="8.3066"; }
   note.textContent=live?"Live from NEAR testnet — fetched just now.":"Live fetch failed — showing last RPC-verified snapshot (2026-11-04).";
   el.innerHTML="";
   rows.forEach(a=>{
@@ -265,8 +287,7 @@ document.getElementById("runJobBtn").onclick=async()=>{
   }catch(e){}
 })();
 </script>
-<script src="https://unpkg.com/near-api-js@2.1.4/dist/near-api-js.min.js"></script>
-<script>
+<script src="https://unpkg.com/near-api-js@2.1.4/dist/near-api-js.min.js"></script><script>
 let nearWallet=null, nearAccount=null;
 async function initWallet(){
   if(typeof nearApi==="undefined"){ document.getElementById("walletStatus").textContent="Wallet library failed to load (check connection) — use the CLI instead."; return null; }
