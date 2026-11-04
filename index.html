@@ -327,7 +327,7 @@ import { setupMyNearWallet } from "https://esm.sh/@near-wallet-selector/my-near-
 let selector = null;
 async function getSelector() {
   if (selector) return selector;
-  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMeteorWalletApp({ contractId: "nft.primitives.testnet" }), setupMyNearWallet()], metadata: { name: "Genesis", description: "Agents you can own, hire, and trust — real NFTs on NEAR testnet.", url: "https://genesis-roan-eta.vercel.app/", icons: ["https://genesis-roan-eta.vercel.app/favicon.svg"], iconUrl: "https://genesis-roan-eta.vercel.app/favicon.svg" } });
+  selector = await setupWalletSelector({ network: "testnet", modules: [setupMeteorWallet(), setupMeteorWalletApp({ contractId: "nft.primitives.testnet" }), setupMyNearWallet({ walletUrl: "https://testnet.mynearwallet.com" })], metadata: { name: "Genesis", description: "Agents you can own, hire, and trust — real NFTs on NEAR testnet.", url: "https://genesis-roan-eta.vercel.app/", icons: ["https://genesis-roan-eta.vercel.app/favicon.svg"], iconUrl: "https://genesis-roan-eta.vercel.app/favicon.svg" } });
   return selector;
 }
 function setStatus(t) { document.getElementById("walletStatus").textContent = t; }
