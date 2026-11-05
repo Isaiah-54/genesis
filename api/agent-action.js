@@ -215,7 +215,11 @@ async function validateAction(action, params, view) {
       let agent = null;
       try { agent = await viewFn(CORE_CONTRACT, 'get_agent', { token_id: params[p] }); } catch (_) {}
       if (!agent) return { ok: false, error: `parent ${params[p]} is not a registered agent` };
-      if (!agent.alive) return { ok: false, error: `parent ${params[p]} is not alive` };
+      // The Core record carries `status: 'Alive'`, not an `alive`
+      // boolean — checking agent.alive refused every breed live
+      // (found 2026-11-05 while checking the rail; the test mock
+      // used to carry the wrong shape too).
+      if (agent.status !== 'Alive') return { ok: false, error: `parent ${params[p]} is not alive (status ${agent.status})` };
     }
     return { ok: true };
   }

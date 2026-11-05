@@ -106,11 +106,16 @@ function mockView(contractId, method, args) {
   }
   if (contractId === 'core.genesisdemo354551.testnet' && method === 'get_agent') {
     const agents = {
-      'genesis-gen-2': { token_id: 'genesis-gen-2', generation: 2, owner_id: 'gen2.genesisdemo354551.testnet', alive: true },
-      'genesis-gen-3': { token_id: 'genesis-gen-3', generation: 4, owner_id: 'gen3.genesisdemo354551.testnet', alive: true },
+      // Shape matches the real Core get_agent record: `status`,
+      // not an `alive` boolean (the mock used to carry alive: true,
+      // which hid a live bug where every breed was refused).
+      'genesis-gen-2': { token_id: 'genesis-gen-2', generation: 2, owner_id: 'gen2.genesisdemo354551.testnet', status: 'Alive' },
+      'genesis-gen-3': { token_id: 'genesis-gen-3', generation: 4, owner_id: 'gen3.genesisdemo354551.testnet', status: 'Alive' },
       // Split-brain: registered in the Core but the NFT was never
       // minted (this is the live genesis-visitor-4 state).
-      'genesis-visitor-4': { token_id: 'genesis-visitor-4', generation: 0, owner_id: 'gen3.genesisdemo354551.testnet', alive: true },
+      'genesis-visitor-4': { token_id: 'genesis-visitor-4', generation: 0, owner_id: 'gen3.genesisdemo354551.testnet', status: 'Alive' },
+      // Dead parent: breeding from it must be refused.
+      'genesis-gen-8': { token_id: 'genesis-gen-8', generation: 8, owner_id: 'gen2.genesisdemo354551.testnet', status: 'Dead' },
     };
     return agents[args.token_id] || null;
   }
@@ -265,6 +270,11 @@ async function main() {
   accepts = acceptsOf(r.payload);
   check('breed without payment returns 402', r.status === 402, 'got ' + r.status);
   check('breed near-intents price is cost-covering (1.50 USDC = 0.6 NEAR)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.destination && a.extra.destination.amount === '1500000'), 'got ' + (accepts && accepts[0] && accepts[0].extra && accepts[0].extra.destination && accepts[0].extra.destination.amount));
+  // Regression: the liveness check reads the Core `status` field,
+  // not an `alive` boolean. A dead parent is refused (400); living
+  // parents pass (the 402 above).
+  r = await call(actionHandler, { action: 'breed', token_id: 'genesis-gen-6', parent1: 'genesis-gen-8', parent2: 'genesis-gen-3' });
+  check('breed with a dead parent returns 400', r.status === 400, 'got ' + r.status);
 
   // 2. Invalid actions are refused BEFORE any payment (400, not 402).
   r = await call(actionHandler, { action: 'mint', token_id: 'genesis-visitor-2' });
