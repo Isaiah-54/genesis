@@ -531,6 +531,33 @@
     if (btn) btn.addEventListener('click', postJob);
   }
 
+  // ─── League figures on the homepage + CV (index.html, cv.html) ───
+  // The hero stat, the live-agent cards and the CV league lines read
+  // from demo/league.json, so they stay current after every arena run
+  // (the old hardcoded 1W-1L / best 107 / 103.40 went stale after run 2).
+  // If the fetch fails, the static fallback text in the pages stays.
+  async function loadLeagueFigures() {
+    let league;
+    try {
+      const r = await fetch('demo/league.json');
+      if (!r.ok) return;
+      league = await r.json();
+    } catch (_) { return; }
+    if (!league || !Array.isArray(league.standings) || !league.standings.length) return;
+    const byToken = {};
+    for (const s of league.standings) byToken[s.token || s.agent] = s;
+    const leader = league.standings[0];
+    const heroLeader = $('heroLeader');
+    if (heroLeader && leader) heroLeader.textContent = 'League leader · score ' + leader.best_score;
+    const gen3 = byToken['genesis-gen-3'], gen2 = byToken['genesis-gen-2'];
+    const set = (id, v) => { const el = $(id); if (el && v !== undefined) el.textContent = v; };
+    if (gen3) {
+      set('cvGen3League', gen3.wins + 'W-' + gen3.losses + 'L · best ' + gen3.best_score);
+      set('cvGen3Earnings', gen3.arena_earnings);
+    }
+    if (gen2) set('cvGen2League', gen2.wins + 'W-' + gen2.losses + 'L · best ' + gen2.best_score);
+  }
+
   // ─── Arena league (arena.html) ───────────────────────────────
   // The standings and latest match are read from demo/league.json, so
   // the page stays current after every arena run (the old static table
@@ -803,5 +830,6 @@
     try { await suggestFreeTokenId(); } catch (_) {}
     try { await loadJobBoard(); } catch (_) {}
     try { await loadArena(); } catch (_) {}
+    try { await loadLeagueFigures(); } catch (_) {}
   });
 })();
