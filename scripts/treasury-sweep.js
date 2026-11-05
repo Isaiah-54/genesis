@@ -3,8 +3,8 @@
 //
 // The economics (Isaiah's rule, 2026-11-05): the caller through x402
 // funds the action, not the treasury owner. A mint or breed costs the
-// treasury 0.6 NEAR (0.5 birth + 0.1 NFT mint). The near-intents
-// price for mint/breed is 1.50 USDC, about 0.6 NEAR at NEAR ~$2.50.
+// treasury 0.15 NEAR (0.05 birth + 0.1 NFT mint). The near-intents
+// price for mint/breed is 0.50 USDC, about 0.15 NEAR at NEAR ~$2.50.
 //
 // The loop closes differently per network:
 //   TESTNET (now): the treasury's testnet USDC (Circle faucet token,
@@ -28,7 +28,7 @@
 //     exists, FUNDING_PRIVATE_KEY set, 1Click quoting works).
 //     On testnet --execute changes nothing: the faucet claim needs a
 //     browser form and is printed as an instruction instead.
-// Exit code: 0 when the treasury covers at least one action (0.6
+// Exit code: 0 when the treasury covers at least one action (0.15
 // NEAR); 1 when it does not (a refill is due).
 //
 // No funds move on a dry run. --execute never moves testnet funds
@@ -44,7 +44,7 @@ const MAINNET_USDC_CONTRACT = 'a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
 const WNEAR_MAINNET = 'nep141:wrap.near';
 const USDC_MAINNET_ASSET = 'nep141:a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
 const FAUCET_URL = 'https://near-faucet.io/';
-const ACTION_COST_NEAR = 0.6; // 0.5 birth + 0.1 NFT mint
+const ACTION_COST_NEAR = 0.15; // 0.05 birth + 0.1 NFT mint (birth_cost lowered 0.5 -> 0.05 NEAR for the Hackathon, 2026-11-05)
 const REFILL_TARGET_NEAR = 1.2; // breed + one more action
 const FAUCET_MAX_PER_REQUEST = 2;
 
@@ -86,7 +86,7 @@ function yoctoToNear(yocto) {
   return Number(yocto) / 1e24;
 }
 
-// Pure: how many 0.6-NEAR actions the treasury can still fund, and
+// Pure: how many 0.15-NEAR actions the treasury can still fund, and
 // whether a refill is due. (Exported for tests.)
 function treasuryHealth(nearBalanceYocto) {
   const near = yoctoToNear(nearBalanceYocto);
@@ -142,7 +142,7 @@ async function main() {
     lines.push('TESTNET treasury ' + TREASURY_ACCOUNT + ': balance unreadable (RPC error) — refill state unknown.');
   } else {
     const health = treasuryHealth(treasuryYocto);
-    lines.push('TESTNET treasury ' + TREASURY_ACCOUNT + ': ' + health.near.toFixed(4) + ' NEAR — covers ' + health.actionsLeft + ' action(s) at 0.6 NEAR each.');
+    lines.push('TESTNET treasury ' + TREASURY_ACCOUNT + ': ' + health.near.toFixed(4) + ' NEAR — covers ' + health.actionsLeft + ' action(s) at 0.15 NEAR each.');
     if (health.refillDue) {
       lines.push('REFILL DUE: below the ' + REFILL_TARGET_NEAR + ' NEAR target (breed + one more action).');
       lines.push('  Claim ' + health.faucetAmount + ' NEAR at ' + FAUCET_URL + ' for account ' + TREASURY_ACCOUNT + ' (max ' + FAUCET_MAX_PER_REQUEST + ' NEAR per request, free, no key needed).');

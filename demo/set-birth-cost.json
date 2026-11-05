@@ -1,0 +1,13 @@
+{
+  "core": "core.genesisdemo354551.testnet",
+  "signer": "genesisdemo354551.testnet",
+  "args": {
+    "birth_cost": "50000000000000000000000",
+    "profit_threshold": "1500000000000000000000000",
+    "max_consecutive_fails": 3,
+    "min_jobs_to_reproduce": 3
+  },
+  "txHash": "8a36885d14471cb0d582361e73c4bdeb57a28c44be3a7717b2ddd6fb02e1b737",
+  "status": "Success",
+  "at": "2026-11-05T21:52:39.002Z"
+}

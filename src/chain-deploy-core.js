@@ -22,7 +22,7 @@ const MASTER_SAVED = JSON.parse(fs.readFileSync('.testnet-account.json', 'utf8')
 const MASTER = MASTER_SAVED.accountId;
 const CORE_ID = `core.${MASTER}`;
 const FUND_NEAR = '4';
-const BIRTH_COST_YOCTO = '500000000000000000000000';       // 0.5 NEAR
+const BIRTH_COST_YOCTO = '50000000000000000000000';        // 0.05 NEAR (lowered from 0.5 for the Hackathon, 2026-11-05)
 const PROFIT_THRESHOLD_YOCTO = '1500000000000000000000000'; // 1.5 NEAR
 
 function rpc(method, params) {

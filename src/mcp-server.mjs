@@ -26,7 +26,7 @@ const { semanticVerify } = require('./semantic-verify.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
-const BIRTH_COST_NEAR = '0.5';
+const BIRTH_COST_NEAR = '0.05'; // lowered from 0.5 NEAR for the Hackathon, 2026-11-05 (see scripts/set-birth-cost.js);
 const ROOT = new URL('..', import.meta.url).pathname;
 function rpc(method, params) {
   const payload = JSON.stringify({ jsonrpc: '2.0', id: 'x', method, params });
@@ -78,7 +78,7 @@ async function corePayJob({ jobId, winner, score, jobDefId, rewardNear, brief, k
 }
 
 // Breed two living agents into a child: check both parents are registered
-// and alive, call the Core breed (0.5 NEAR birth cost from the treasury),
+// and alive, call the Core breed (0.05 NEAR birth cost from the treasury),
 // read the child back for its generation and skills, then mint the child
 // NFT with BOTH parents recorded in `extra`. Returns the breed tx, the
 // mint tx, and the child generation + skills.
@@ -117,7 +117,7 @@ server.tool('genesis_mint', 'Mint a Genesis NFT (NEP-171) on nft.primitives.test
     extra: JSON.stringify({ generation: a.generation, parent: a.parent, speed: a.speed, quality: a.quality, costEff: a.costEff, status: 'alive' }) };
   return text(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: a.token_id, receiver_id: a.receiver_id, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))] }));
 });
-server.tool('genesis_core_birth', 'Register an agent in the onchain Genesis Core registry (core.genesisdemo354551.testnet): birth() attaches the 0.5 NEAR birth cost from the treasury and stores generation, parent and skills onchain. The owner account must already exist. Skill defaults to 1.0/1.0/1.0 when omitted; parent may be "-" for none. Newborns are gen 0 only — higher generations are earned by evolving (genesis_evolve) or by breeding (genesis_breed).', { token_id: z.string(), owner_id: z.string(), generation: z.number(), parent: z.string() }, async (a) => {
+server.tool('genesis_core_birth', 'Register an agent in the onchain Genesis Core registry (core.genesisdemo354551.testnet): birth() attaches the 0.05 NEAR birth cost from the treasury and stores generation, parent and skills onchain. The owner account must already exist. Skill defaults to 1.0/1.0/1.0 when omitted; parent may be "-" for none. Newborns are gen 0 only — higher generations are earned by evolving (genesis_evolve) or by breeding (genesis_breed).', { token_id: z.string(), owner_id: z.string(), generation: z.number(), parent: z.string() }, async (a) => {
   if (a.generation !== 0) throw new Error(`core-birth is gen 0 only (you asked for gen ${a.generation}). Higher generations are earned by winning — register the newborn at gen 0, then evolve it after 3 paid wins, or breed two proven parents.`);
   return text(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('birth', { token_id: a.token_id, owner_id: a.owner_id, generation: a.generation, parent: (!a.parent || a.parent === '-') ? null : a.parent, skill: null }, 100000000000000n, utils.format.parseNearAmount(BIRTH_COST_NEAR))] }));
 });
@@ -144,7 +144,7 @@ server.tool('genesis_jobs', 'Every job on the Genesis Core (core.genesisdemo3545
   const rest = (jobs || []).filter((j) => j.status !== 'open');
   return text([...open, ...rest].map((j) => ({ job_id: j.job_id, brief: j.brief, keywords: j.keywords, reward_near: (Number(j.reward) / 1e24).toFixed(4), status: j.status, winner: j.winner || null, poster: j.poster })));
 });
-server.tool('genesis_breed', 'Breed two living Genesis agents into a child: both parents must be registered in the Core and alive. Calls the Core breed (0.5 NEAR birth cost from the treasury), reads the child back for its generation and skills (generation = max(parent gens) + 1, skills = parents average plus a small mutation), then mints the child NFT on nft.primitives.testnet with BOTH parents recorded in its metadata extra (parent + second_parent). owner_id defaults to the treasury.', { child_token_id: z.string(), parent1_token_id: z.string(), parent2_token_id: z.string(), owner_id: z.string().optional() }, async (a) => text(await breedAgent({ childTokenId: a.child_token_id, parent1: a.parent1_token_id, parent2: a.parent2_token_id, ownerId: a.owner_id || MASTER })));
+server.tool('genesis_breed', 'Breed two living Genesis agents into a child: both parents must be registered in the Core and alive. Calls the Core breed (0.05 NEAR birth cost from the treasury), reads the child back for its generation and skills (generation = max(parent gens) + 1, skills = parents average plus a small mutation), then mints the child NFT on nft.primitives.testnet with BOTH parents recorded in its metadata extra (parent + second_parent). owner_id defaults to the treasury.', { child_token_id: z.string(), parent1_token_id: z.string(), parent2_token_id: z.string(), owner_id: z.string().optional() }, async (a) => text(await breedAgent({ childTokenId: a.child_token_id, parent1: a.parent1_token_id, parent2: a.parent2_token_id, ownerId: a.owner_id || MASTER })));
 server.tool('genesis_create_agent', 'Create a Genesis agent subaccount under the treasury, funded with testnet NEAR. The new key is saved to .testnet-agents.json BEFORE the creation tx is broadcast.', { agent_id: z.string(), fund_near: z.string() }, async ({ agent_id, fund_near }) => {
   const accountId = agent_id.endsWith('.' + MASTER) ? agent_id : agent_id + '.' + MASTER;
   const kp = KeyPair.fromRandom('ed25519');

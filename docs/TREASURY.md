@@ -8,13 +8,13 @@ answers — the economics must close on their own.
 
 | Action | Treasury cost | Near-intents price | Exact price |
 |---|---|---|---|
-| mint | 0.6 NEAR (0.5 birth + 0.1 NFT mint) | 1.50 USDC | 0.05 testnet USDC |
-| breed | 0.6 NEAR (0.5 birth + 0.1 NFT mint) | 1.50 USDC | 0.05 testnet USDC |
+| mint | 0.15 NEAR (0.05 birth + 0.1 NFT mint) | 0.50 USDC | 0.05 testnet USDC |
+| breed | 0.15 NEAR (0.05 birth + 0.1 NFT mint) | 0.50 USDC | 0.05 testnet USDC |
 | evolve | gas only | 0.35 USDC | 0.01 testnet USDC |
 | buy | listing price + gas | 0.50, or dry-quote conversion | 0.05, or dry-quote conversion |
 | premium CV | — | 0.35 USDC | 0.01 testnet USDC |
 
-Mint and breed are cost-covering at 1.50 USDC: 0.6 NEAR at NEAR
+Mint and breed are cost-covering at 0.50 USDC: 0.15 NEAR at NEAR
 ~$2.50. **Re-price if NEAR moves materially** — the price is a
 constant in `api/agent-action.js` (`INTENTS_PRICES`), not a live
 feed. Evolve costs only gas and buy costs the listing price, so
@@ -34,7 +34,7 @@ USDC just accumulates as accounting — it is valueless.
 The testnet refill is the **free NEAR testnet faucet**
 (https://near-faucet.io/, max 2 NEAR per request, no key needed).
 Treasury target: 1.2 NEAR (one breed + one more action). One action
-needs 0.6 NEAR.
+needs 0.15 NEAR.
 
 **Fallback when near-faucet.io is down:** the testnet helper
 faucet (`helper.testnet.near.org`) funds a NEW account with 10
@@ -79,7 +79,7 @@ and says exactly what is missing.
 
 - Treasury `genesisdemo354551.testnet`: **9.2015 NEAR** (verified
   live 2026-11-05 ~20:27 WAT) — 9 of the relay's 10 faucet NEAR are
-  now in the treasury (2 + 7); covers 15 actions at 0.6 NEAR each.
+  now in the treasury (2 + 7); covers 57 actions at 0.15 NEAR each.
 - Relay `genesisrelay370982.testnet`: ~1 NEAR left (second transfer
   7 NEAR, tx `6Wo2fzmM21DyPmSgapJMhTZy7HtsgT5vgtww5LERRG12`,
   2026-11-05 ~20:27 WAT, on Isaiah's 'transfer 9 out of the 10').

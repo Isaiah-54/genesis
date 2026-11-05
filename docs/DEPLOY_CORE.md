@@ -43,7 +43,7 @@ Preview (shown before anything is signed):
 | Create `core.genesisdemo354551.testnet` | CreateAccount + 4 NEAR funding + full-access key | 4 NEAR from treasury |
 | Deploy WASM | DeployContract, code = the built wasm | storage ~1 NEAR per 100 KB of wasm (e.g. ~2.5 NEAR for 250 KB), paid from the core account's 4 NEAR; leftover stays in the core account, not lost |
 | Init | `new({owner_id, treasury})` | gas only |
-| Params | `set_params`: birth_cost **0.5 NEAR**, profit_threshold **1.5 NEAR**, max 3 consecutive fails, min 3 jobs to reproduce | gas only |
+| Params | `set_params`: birth_cost **0.05 NEAR** (lowered from 0.5 on 2026-11-05 for the Hackathon), profit_threshold **1.5 NEAR**, max 3 consecutive fails, min 3 jobs to reproduce | gas only |
 | Verify | `agent_count` (expect 0), `get_agent(genesis-gen-2)` (expect null) | read-only |
 
 Treasury after: ~6.2965 − 4 − gas ≈ **2.29 NEAR**. Testnet NEAR is

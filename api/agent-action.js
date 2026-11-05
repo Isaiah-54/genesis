@@ -30,14 +30,16 @@
 //     or the listing's NEAR price converted by a 1Click dry quote when
 //     it works — it does not right now, the NEAR solvers are down).
 //   near-intents rail (MAINNET USDC, real money, delivered to the
-//     mainnet funding account): mint 1.50, breed 1.50, evolve 0.35,
+//     mainnet funding account): mint 0.50, breed 0.50, evolve 0.35,
 //     buy 0.50. These sit above the highest offered route minimum
 //     (Ethereum USDC ~0.30 USDC) so a quote usually clears.
 // The 402 price is the service fee for executing the action AND the
 // funding for the underlying NEAR cost — the caller funds the action,
 // not the treasury owner (Isaiah's rule, 2026-11-05). Mint and breed
-// each cost the treasury 0.6 NEAR (0.5 birth + 0.1 NFT mint), about
-// $1.50 at NEAR ~$2.50, so their near-intents price is 1.50 USDC.
+// each cost the treasury 0.15 NEAR (0.05 birth + 0.1 NFT mint), about
+// $0.38 at NEAR ~$2.50, so their near-intents price is 0.50 USDC
+// (birth_cost was 0.5 NEAR until 2026-11-05, when Isaiah lowered it
+// to 0.05 for the Hackathon — see scripts/set-birth-cost.js).
 // Evolve costs only gas (no attached deposit) and buy costs the
 // listing price, so their prices are unchanged. The treasury swaps
 // received USDC back into NEAR (scripts/treasury-sweep.js, docs/
@@ -45,10 +47,10 @@
 // testnet faucet, because testnet USDC has no swap route.
 const EXACT_PRICES = { mint: 50000, breed: 50000, evolve: 10000, buy: 50000 };
 // Prices on the near-intents rail (mainnet USDC, 6 decimals). Mint and
-// breed are cost-covering: 1.50 USDC ≈ 0.6 NEAR at NEAR ~$2.50.
+// breed are cost-covering: 0.50 USDC ≈ 0.15 NEAR at NEAR ~$2.50.
 // Re-price if NEAR moves materially. Evolve (gas only) and buy
 // (listing price) are unchanged.
-const INTENTS_PRICES = { mint: 1500000, breed: 1500000, evolve: 350000, buy: 500000 };
+const INTENTS_PRICES = { mint: 500000, breed: 500000, evolve: 350000, buy: 500000 };
 //
 // Modes (mode= query/body, default live; never mixed):
 //   live — real payments, real onchain execution.
@@ -95,7 +97,7 @@ const BUY_GAS = BigInt('200000000000000'); // 200 TGas
 const YOCTO_PER_NEAR = BigInt('1000000000000000000000000');
 
 // Prices on the near-intents rail (mainnet USDC, 6 decimals). Mint and
-// breed are cost-covering: 1.50 USDC ≈ 0.6 NEAR at NEAR ~$2.50.
+// breed are cost-covering: 0.50 USDC ≈ 0.15 NEAR at NEAR ~$2.50.
 // Re-price if NEAR moves materially. Evolve (gas only) and buy
 // (listing price) are unchanged.
 
@@ -303,7 +305,7 @@ async function defaultExecutor(action, params, ctx) {
       const birth = await treasury.functionCall({
         contractId: CORE_CONTRACT, methodName: 'birth',
         args: { token_id: params.token_id, owner_id: receiver, generation: 0, parent: null, skill: { speed: 1.0, quality: 1.0, cost_eff: 1.0 } },
-        gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.5'),
+        gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.05'),
       });
       txs.birth = birth.transaction.hash;
     } else {
@@ -335,7 +337,7 @@ async function defaultExecutor(action, params, ctx) {
       const bred = await treasury.functionCall({
         contractId: CORE_CONTRACT, methodName: 'breed',
         args: { token_id: params.token_id, owner_id: receiver, parent1: params.parent1, parent2: params.parent2 },
-        gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.5'),
+        gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.05'),
       });
       txs.breed = bred.transaction.hash;
     } else {

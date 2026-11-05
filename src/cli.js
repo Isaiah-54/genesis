@@ -5,7 +5,7 @@
 //   node src/cli.js agents
 //   node src/cli.js token genesis-gen-2
 //   node src/cli.js balance gen2.genesisdemo354551.testnet
-//   node src/cli.js create-agent gen3 0.5
+//   node src/cli.js create-agent gen3 0.05
 //   node src/cli.js mint genesis-gen-3 gen3.genesisdemo354551.testnet "Genesis Gen 3" 3 genesis-gen-2
 //   node src/cli.js pay gen2.genesisdemo354551.testnet 0.01
 //   node src/cli.js transfer-nft genesis-weak-2 genesisdemo354551.testnet
@@ -24,7 +24,7 @@ const { mediaForGen } = require('./nft-media.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
-const BIRTH_COST_NEAR = '0.5';
+const BIRTH_COST_NEAR = '0.05'; // lowered from 0.5 NEAR for the Hackathon, 2026-11-05 (see scripts/set-birth-cost.js);
 const TOKENS = ['genesis-gen-0', 'genesis-gen-1', 'genesis-gen-2', 'genesis-gen-3', 'genesis-weak-2', 'genesis-gen-5-weak'];
 function rpc(method, params) {
   const payload = JSON.stringify({ jsonrpc: '2.0', id: 'x', method, params });
@@ -81,7 +81,7 @@ async function corePayJob({ jobId, winner, score, jobDefId, rewardNear, brief, k
 }
 
 // Breed two living agents into a child: check both parents are registered
-// and alive, call the Core breed (0.5 NEAR birth cost from the treasury),
+// and alive, call the Core breed (0.05 NEAR birth cost from the treasury),
 // read the child back for its generation and skills, then mint the child
 // NFT with BOTH parents recorded in `extra`. Returns the breed tx, the
 // mint tx, and the child generation + skills.
@@ -136,13 +136,13 @@ async function main() {
   balance <account>       One account's balance
   create-agent <id> <fund>  Create agent subaccount (key saved FIRST)
   mint <token> <receiver> <title> <gen> <parent> [parent2]   Mint a Genesis NFT (parent2 records a second parent, e.g. a bred child)
-  core-birth <token> <owner> <gen> <parent|->  Register an agent in the onchain Core registry (0.5 NEAR from treasury)
+  core-birth <token> <owner> <gen> <parent|->  Register an agent in the onchain Core registry (0.05 NEAR from treasury)
   core-agent <token>  One agent's Core registry record
   core-count          How many agents the Core registry holds
   core-pay-job <job_id> <winner> <score> <job_def_id> [reward_near] [brief] [keywords]  Pay a winner through the Core escrow (posts the job first if needed; the frontier is checked and updated onchain)
   post-job <brief> <keywords> <reward_near>  Post a job to the Core escrow and print its job id
   jobs                Every job on the Core (open first)
-  breed <child> <parent1> <parent2> [owner]  Breed two living agents into a child (0.5 NEAR birth cost) and mint the child NFT with both parents recorded
+  breed <child> <parent1> <parent2> [owner]  Breed two living agents into a child (0.05 NEAR birth cost) and mint the child NFT with both parents recorded
   pay <receiver> <amount> Pay testnet NEAR from treasury
   transfer-nft <token> <receiver>  Transfer NFT (refuses locked tokens)
   job <agent> <page_url>  Real job: fetch, verify, pay 0.01 on PASS
@@ -222,7 +222,7 @@ async function main() {
   }
   if (cmd === 'core-birth') {
     // Register an agent in the onchain Core registry: birth() attaches the
-    // 0.5 NEAR birth cost from the treasury and stores generation, parent
+    // 0.05 NEAR birth cost from the treasury and stores generation, parent
     // and skills onchain. The owner account must already exist (create it
     // with create-agent first). Skill defaults to 1.0/1.0/1.0 when omitted.
     // Newborns are gen 0 only — higher generations are earned by evolving

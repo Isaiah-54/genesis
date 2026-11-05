@@ -14,8 +14,8 @@ limits.
 
 | Action | Parameters | What it does onchain (testnet) |
 |---|---|---|
-| `mint` | `token_id` (new gen-0 id), `receiver` (owner, default treasury), `title` | Core `birth` (0.5 NEAR) + NFT `nft_mint` (0.1 NEAR). Gen 0 only. |
-| `breed` | `token_id` (child id), `parent1`, `parent2`, `receiver` | Core `breed` (0.5 NEAR) + NFT `nft_mint` (0.1 NEAR). Child gen = max(parent gens) + 1. |
+| `mint` | `token_id` (new gen-0 id), `receiver` (owner, default treasury), `title` | Core `birth` (0.05 NEAR) + NFT `nft_mint` (0.1 NEAR). Gen 0 only. |
+| `breed` | `token_id` (child id), `parent1`, `parent2`, `receiver` | Core `breed` (0.05 NEAR) + NFT `nft_mint` (0.1 NEAR). Child gen = max(parent gens) + 1. |
 | `evolve` | `token_id` | Core `evolve` (gas only). Needs 3 more paid wins since the last evolution, max gen 9. |
 | `buy` | `token_id` (listed token), `receiver` | Core `buy_nft` with the listing price in NEAR attached (seller gets 95%, treasury 5%). The NFT goes to the treasury, then to `receiver` if one is given. |
 
@@ -42,8 +42,8 @@ limits.
 The 402 price is the service fee for executing the action AND the
 funding for the underlying NEAR cost — the caller funds the action,
 not the treasury owner. Mint and breed each cost the treasury 0.6
-NEAR (0.5 birth + 0.1 NFT mint), about $1.50 at NEAR ~$2.50, so their
-near-intents price is 1.50 USDC. Evolve costs only gas and buy costs
+NEAR (0.05 birth + 0.1 NFT mint), about $0.38 at NEAR ~$2.50, so their
+near-intents price is 0.50 USDC. Evolve costs only gas and buy costs
 the listing price, so their prices are unchanged. The treasury swaps
 received USDC back into NEAR (see `docs/TREASURY.md` and
 `scripts/treasury-sweep.js`); on testnet the refill comes from the
@@ -51,8 +51,8 @@ free NEAR testnet faucet, because testnet USDC has no swap route.
 
 | Action | Exact rail (testnet USDC) | Near-intents rail (mainnet USDC) |
 |---|---|---|
-| mint | 0.05 | 1.50 |
-| breed | 0.05 | 1.50 |
+| mint | 0.05 | 0.50 |
+| breed | 0.05 | 0.50 |
 | evolve | 0.01 | 0.35 |
 | buy | 0.05 fixed demo, or the listing's NEAR price converted by a 1Click dry quote when it works | 0.50, or the dry-quote conversion when it works |
 
