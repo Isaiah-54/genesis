@@ -78,7 +78,7 @@ function loadPage() {
       }
       if (url === '/api/pay-job') {
         calls.payJob.push(JSON.parse(opts.body));
-        return { json: async () => ({ ok: true, verdict: 'PASS', pay_tx: 'payhash123', output_hash: 'abc' }) };
+        return { json: async () => ({ ok: true, verdict: 'PASS', median_score: 476, pay_tx: 'payhash123', output_hash: 'abc' }) };
       }
       // Simulated testnet RPC: only genesis-visitor-1 already exists.
       let tokenId = '';
@@ -176,10 +176,14 @@ function fail(msg) { console.log('FAIL:', msg); process.exit(1); }
   if (calls.payJob.length !== 1) fail('agent job did not call the payment service');
   const payBody = calls.payJob[0];
   if (payBody.token_id !== 'genesis-visitor-2' || payBody.account_id !== 'isaiah.testnet') fail('payment service got the wrong token/account');
+  if (!Array.isArray(payBody.outputs) || payBody.outputs.length !== 3) fail('payment service did not receive 3 runs');
   if (typeof payBody.source !== 'string' || !payBody.source.includes('nft_mint')) fail('payment service did not receive the source text');
   if ('min_words' in payBody) fail('payment service still receives a word count');
   if (!page4.$('agentJobPay').innerHTML.includes('Paid 0.01 NEAR automatically')) fail('no paid confirmation shown');
+  if (!page4.$('agentJobPay').innerHTML.includes('median score 476')) fail('pay message does not show the median score');
   if (!page4.$('agentJobVerdict').textContent.includes('Coverage 3/3')) fail('verdict does not show the coverage gate');
+  if (!page4.$('agentJobVerdict').textContent.includes('Median score: 476')) fail('verdict does not show the median score');
+  if (!page4.$('agentJobVerdict').textContent.includes('Runs: 476, 476, 476')) fail('verdict does not show the three runs');
 
   // 8. A copy-paste of the source text FAILS the originality gate: no
   // payment call, and the agent is told the job failed verification.

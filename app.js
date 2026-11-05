@@ -11,6 +11,7 @@
  */
 (function () {
   const NFT_CONTRACT = 'nft.primitives.testnet';
+  const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
   const NETWORK = 'testnet';
   const MINT_DEPOSIT = '100000000000000000000000'; // 0.1 NEAR in yocto
   const GAS = '300000000000000'; // 300 TGas
@@ -269,7 +270,12 @@
     const copiedShare = outTokens.length ? copiedWords / outTokens.length : 0;
     const originality = { passed: copiedShare < 0.30, copiedShare: +copiedShare.toFixed(2), copiedWords, totalWords: outTokens.length };
     const structure = { passed: sentences.length >= 3, sentences: sentences.length };
-    return { pass: coverage.passed && originality.passed && structure.passed, gates: { coverage, originality, structure } };
+    const pass = coverage.passed && originality.passed && structure.passed;
+    // Deterministic quality score (labinius-style: one measured number).
+    const score = coverage.covered * 100
+      + Math.min(originality.totalWords, 200)
+      + Math.round((1 - copiedShare) * 100);
+    return { pass, score, gates: { coverage, originality, structure } };
   }
 
   function gatesText(g) {
@@ -278,36 +284,90 @@
       ' · Structure ' + g.structure.sentences + ' sentences';
   }
 
-  async function runBrowserJob(text, brief, keywords) {
-    const kw = keywords.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-    let output = '';
-    let worker = 'extractive-fallback';
+  // Generic read-only view call on testnet RPC.
+  async function viewCall(accountId, methodName, args) {
+    const r = await fetch('https://rpc.testnet.near.org', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 'genesis-view', method: 'query',
+        params: {
+          request_type: 'call_function', account_id: accountId,
+          method_name: methodName,
+          args_base64: btoa(JSON.stringify(args)),
+          finality: 'final',
+        },
+      }),
+    });
+    const data = await r.json();
+    const bytes = data && data.result && data.result.result;
+    if (!bytes || !bytes.length) return null;
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(bytes)));
+  }
+
+  // The labinius frontier for this job definition: the best score on it so
+  // far, or null when no attempt has paid yet. jobDefId is the sha256 of
+  // brief + '|' + keywords + '|' + source (same as engine.js / pay-job).
+  async function getFrontier(brief, keywords, source) {
     try {
-      const prompt =
-        'Summarise the following for a brief about "' +
-        brief +
-        '". Cover every one of these keywords, each inside a full sentence of its own: ' +
-        kw.join(', ') +
-        '. Write in your own words — do not copy sentences from the text. Write at least three sentences. Text:\n\n' +
-        text.slice(0, 2500);
-      const r = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt));
-      if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; }
-    } catch (_) {}
-    if (!output || output.length < 40) {
-      const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-      const briefWords = new Set((brief.toLowerCase().match(/[a-z]+/g) || []));
-      const scored = sentences
-        .map((s) => ({
-          s,
-          score: (s.toLowerCase().match(/[a-z]+/g) || []).filter((w) => briefWords.has(w)).length,
-        }))
-        .sort((a, b) => b.score - a.score);
-      output =
-        '[extractive-fallback] ' +
-        (scored.slice(0, 3).map((x) => x.s).join(' ') || text.slice(0, 200));
+      const defId = await sha256Hex(brief + '|' + keywords + '|' + source);
+      if (!defId || defId.startsWith('(')) return null;
+      return await viewCall(CORE_CONTRACT, 'get_frontier', { job_def_id: defId });
+    } catch (_) {
+      return null;
     }
-    const v = verifyStrictBrowser(text, kw, output);
-    return { output, words: v.gates.originality.totalWords, gates: v.gates, pass: v.pass, worker };
+  }
+
+  // Labinius-style: 3 fresh model runs of the same job. All 3 must pass
+  // the gates; the attempt is scored by the MEDIAN score, so one lucky
+  // output cannot win. onProgress(run) reports each run to the caller.
+  async function runBrowserJob(text, brief, keywords, onProgress) {
+    const kw = keywords.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const outputs = [];
+    let worker = 'extractive-fallback';
+    for (let run = 0; run < 3; run++) {
+      if (onProgress) onProgress(run + 1);
+      let output = '';
+      try {
+        const prompt =
+          'Summarise the following for a brief about "' +
+          brief +
+          '". Cover every one of these keywords, each inside a full sentence of its own: ' +
+          kw.join(', ') +
+          '. Write in your own words — do not copy sentences from the text. Write at least three sentences. Text:\n\n' +
+          text.slice(0, 2500);
+        const r = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt));
+        if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; }
+      } catch (_) {}
+      if (!output || output.length < 40) {
+        const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+        const briefWords = new Set((brief.toLowerCase().match(/[a-z]+/g) || []));
+        const scored = sentences
+          .map((s) => ({
+            s,
+            score: (s.toLowerCase().match(/[a-z]+/g) || []).filter((w) => briefWords.has(w)).length,
+          }))
+          .sort((a, b) => b.score - a.score);
+        output =
+          '[extractive-fallback] ' +
+          (scored.slice(0, 3).map((x) => x.s).join(' ') || text.slice(0, 200));
+      }
+      outputs.push(output);
+    }
+    const results = outputs.map((o) => ({ output: o, v: verifyStrictBrowser(text, kw, o) }));
+    const allPass = results.every((r) => r.v.pass);
+    const scores = results.map((r) => r.v.score).sort((a, b) => a - b);
+    const medianScore = scores[Math.floor(scores.length / 2)];
+    const median = results.find((r) => r.v.score === medianScore) || results[0];
+    return {
+      outputs,
+      medianOutput: median.output,
+      medianScore,
+      scores: results.map((r) => r.v.score),
+      gates: median.v.gates,
+      pass: allPass,
+      worker,
+    };
   }
 
   async function sha256Hex(text) {
@@ -334,28 +394,45 @@
         out.textContent = 'This is a MAINNET account (' + accountId + '). Agent jobs pay in testnet NEAR — connect a .testnet account instead.';
         return;
       }
-      out.textContent = 'Running… (real model call, can take up to a minute)';
+      out.textContent = 'Running… (3 real model calls, can take up to a few minutes — the median score counts)';
+      // Show the labinius bar before running: the best score on this job.
+      const frontier = await getFrontier(
+        $('agentJobBrief').value,
+        $('agentJobKeywords').value,
+        $('agentJobText').value
+      );
+      if (frontier) {
+        verdict.textContent = 'Current best on this job: ' + frontier.best_score + ' — beat it to earn 0.01 NEAR.';
+        verdict.style.color = '';
+      } else {
+        verdict.textContent = 'No best yet on this job — a passing run sets the frontier.';
+        verdict.style.color = '';
+      }
       const res = await runBrowserJob(
         $('agentJobText').value,
         $('agentJobBrief').value,
-        $('agentJobKeywords').value
+        $('agentJobKeywords').value,
+        (run) => { out.textContent = 'Running… model call ' + run + ' of 3 (median score counts)'; }
       );
-      out.textContent = res.output;
+      out.textContent = res.medianOutput;
       verdict.textContent =
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
+        ' · Runs: ' + res.scores.join(', ') + ' · Median score: ' + res.medianScore +
+        (frontier ? ' · Frontier: ' + frontier.best_score : ' · Frontier: none yet') +
         ' · ' + gatesText(res.gates) + ' · Verdict: ' +
         (res.pass ? 'PASS' : 'FAIL');
       verdict.style.color = res.pass ? 'var(--green)' : 'var(--red)';
-      const hash = await sha256Hex(res.output);
+      const hash = await sha256Hex(res.medianOutput);
       if (hashEl) hashEl.textContent = 'Full output sha256: ' + hash;
       if (!res.pass) {
-        if (payEl) payEl.textContent = 'No payment — job failed verification.';
+        if (payEl) payEl.textContent = 'No payment — a run failed verification.';
         return;
       }
       const payload =
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
+        ' · Runs: ' + res.scores.join(', ') + ' · Median score: ' + res.medianScore +
         ' · ' + gatesText(res.gates) + ' · Verdict: PASS' +
-        ' · Output hash: ' + hash + ' · Output: ' + res.output;
+        ' · Output hash: ' + hash + ' · Output: ' + res.medianOutput;
       // Automatic payment: send the verified result to the server function,
       // which re-checks the output hash and the verdict and pays 0.01 NEAR
       // from the treasury through the Core escrow. The copy button stays as
@@ -369,7 +446,7 @@
           body: JSON.stringify({
             token_id: tokenId,
             account_id: accountId,
-            output: res.output,
+            outputs: res.outputs,
             source: $('agentJobText').value,
             brief: $('agentJobBrief').value,
             keywords: $('agentJobKeywords').value,
@@ -380,7 +457,7 @@
           paid = true;
           if (payEl) {
             payEl.innerHTML =
-              'Paid 0.01 NEAR automatically to ' + accountId + '. Tx: <a href="https://testnet.nearblocks.io/txns/' + pay.pay_tx + '" target="_blank" rel="noopener">' +
+              'Paid 0.01 NEAR automatically to ' + accountId + ' (median score ' + pay.median_score + '). Tx: <a href="https://testnet.nearblocks.io/txns/' + pay.pay_tx + '" target="_blank" rel="noopener">' +
               pay.pay_tx.slice(0, 12) + '…</a>';
             payEl.style.color = 'var(--green)';
           }
@@ -408,15 +485,17 @@
     runJobBtn.addEventListener('click', async () => {
       const out = $('jobOut');
       const verdict = $('jobVerdict');
-      out.textContent = 'Running…';
+      out.textContent = 'Running… (3 model calls — the median score counts)';
       const res = await runBrowserJob(
         $('jobText').value,
         $('jobBrief').value,
-        $('jobKeywords').value
+        $('jobKeywords').value,
+        (run) => { out.textContent = 'Running… model call ' + run + ' of 3 (median score counts)'; }
       );
-      out.textContent = res.output;
+      out.textContent = res.medianOutput;
       verdict.textContent =
         (res.pass ? 'PASS' : 'FAIL') +
+        ' · Runs: ' + res.scores.join(', ') + ' · Median score: ' + res.medianScore +
         ' · ' +
         gatesText(res.gates);
       verdict.style.color = res.pass ? 'var(--green)' : 'var(--red)';

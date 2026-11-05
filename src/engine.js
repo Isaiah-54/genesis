@@ -172,9 +172,50 @@ function verifyStrict(job, output) {
     totalWords: outTokens.length,
   };
   const structure = { passed: sentences.length >= 3, sentences: sentences.length };
+  const pass = coverage.passed && originality.passed && structure.passed;
+  // Deterministic quality score (labinius-style: one measured number).
+  // coverage*100 + words (capped at 200) + originality points (0-100).
+  // For 3 keywords the max is 600; a good original summary scores ~476.
+  const score = coverage.covered * 100
+    + Math.min(originality.totalWords, 200)
+    + Math.round((1 - copiedShare) * 100);
   return {
-    pass: coverage.passed && originality.passed && structure.passed,
+    pass,
+    score,
     gates: { coverage, originality, structure },
+  };
+}
+
+// Job-definition id for the frontier: sha256 of brief + keywords + source.
+// Two attempts on the same brief/keywords/source share one frontier; a
+// different source or brief is a different job with its own frontier.
+function jobDefId(brief, keywords, source) {
+  const crypto = require('crypto');
+  return crypto
+    .createHash('sha256')
+    .update((brief || '') + '|' + (keywords || []).join(',') + '|' + (source || ''))
+    .digest('hex');
+}
+
+// Labinius-style multi-run check: verify every submitted output, require
+// ALL of them to pass the gates, and score the attempt by the MEDIAN
+// score. One lucky output cannot win; the median output is the one paid on.
+function verifyRuns(job, outputs) {
+  const results = (outputs || []).map((output) => ({
+    output,
+    v: verifyStrict(job, output),
+  }));
+  const allPass = results.length > 0 && results.every((r) => r.v.pass);
+  const scores = results.map((r) => r.v.score).sort((a, b) => a - b);
+  const medianScore = scores.length ? scores[Math.floor(scores.length / 2)] : 0;
+  const median = results.find((r) => r.v.score === medianScore) || results[0];
+  return {
+    pass: allPass,
+    medianScore,
+    medianOutput: median ? median.output : '',
+    medianGates: median ? median.v.gates : null,
+    scores: results.map((r) => r.v.score),
+    runs: results.length,
   };
 }
 
@@ -268,5 +309,7 @@ module.exports = {
   work,
   verify,
   verifyStrict,
+  jobDefId,
+  verifyRuns,
   skillFor,
 };

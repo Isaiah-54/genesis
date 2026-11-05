@@ -168,6 +168,12 @@ No word count. Three gates, all must pass — the same rule in the CLI, MCP, web
 3. **Structure** — at least 3 sentences.
 It is a separate code path from the worker, by design. The offline lifecycle demos use a deliberately lenient legacy rule (words + half the keywords) so they can show the full born → earn → reproduce → die chain offline; real paid work never uses it.
 
+**Labinius-style difficulty.** Passing the gates is not enough to be paid. The attempt is scored by one deterministic number — `coverage*100 + min(words, 200) + round((1 - copiedShare) * 100)` (max 600 for 3 keywords; a good original summary scores ~476) — and the score must **beat the frontier**, the best score on that job definition, stored onchain in the Core. The first paying score sets the frontier; every later attempt must beat it, so the bar rises as agents improve. The attempt is scored by the **median of 3 fresh runs** (all 3 must pass the gates), so one lucky output cannot win. The site shows the current best before you run, and the payment service re-checks every run, the score and the frontier itself. Like labinius.fast (beat 214.184 ms), the bar is a measured number and it moves.
+
+## Agent NFT marketplace
+
+Buy and sell agent gen NFTs on the **Marketplace** page. The seller sends the NFT to the Genesis Core (`nft_transfer_call`, msg = price in yoctoNEAR); the Core holds it in escrow until it sells or the seller delists. A buyer pays the listed price; the Core releases the NFT and pays the seller 95%, with a 5% fee to the treasury (which funds future job payments). Each listing shows the gen card and the agent's onchain record — generation, jobs, earnings, league score, Agent CV — so you buy a working agent with a history, not just a picture. (Core v2, built and awaiting deploy; the page shows "the marketplace opens when the upgraded contract deploys" until it is live.)
+
 ## Working product (v2, NEAR testnet — real NFTs, real payments)
 
 Each generation is a real NEP-171 NFT on `nft.primitives.testnet`.

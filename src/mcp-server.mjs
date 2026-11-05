@@ -9,6 +9,7 @@
 // "key not held" instead of being faked — that guard exists because the
 // first realistic run lost gen0/gen1/gen5 subaccount keys.
 import fs from 'fs';
+import crypto from 'crypto';
 import { execSync } from 'child_process';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -17,7 +18,7 @@ import nearApi from 'near-api-js';
 import { mediaForGen } from './nft-media.js';
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = nearApi;
 import engine from './engine.js';
-const { verify, verifyStrict } = engine;
+const { verify, verifyStrict, jobDefId, verifyRuns } = engine;
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { workLLM } = require('./worker-llm.js');
@@ -95,11 +96,24 @@ server.tool('genesis_job', 'Run a real Genesis job: fetch a live page, summarise
   const page = execSync(`curl -s -m 30 ${page_url} | perl -0777 -pe 's/<script.*?<\\/script>//gs; s/<style.*?<\\/style>//gs' | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
   if (page.length < 500) throw new Error('Fetched page too short for a real job');
   const job = { brief, keywords, text: page.slice(0, 3000) };
-  const llm = await workLLM(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
-  const output = llm.output;
-  const v = verifyStrict(job, output);
+  // Labinius-style: 3 fresh runs, all must pass the gates, median score counts.
+  const outputs = [];
+  let llm = null;
+  for (let i = 0; i < 3; i++) {
+    llm = await workLLM(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
+    outputs.push(llm.output);
+  }
+  const v = verifyRuns(job, outputs);
+  const defId = jobDefId(brief, keywords, job.text);
+  let frontier = null;
+  try { frontier = viewCall(CORE_CONTRACT, 'get_frontier', { job_def_id: defId }); } catch (_) {}
   let payment = null;
-  if (v.pass) payment = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: agent_id, actions: [transactions.transfer(utils.format.parseNearAmount('0.01'))] });
-  return text({ worker: llm.worker, model: llm.model, pass: v.pass, gates: v.gates, payment });
+  if (v.pass && (!frontier || v.medianScore > frontier.best_score)) {
+    // Pay through the Core escrow so the frontier updates onchain.
+    const jobId = crypto.createHash('sha256').update(v.medianOutput).digest('hex');
+    await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('post_job', { job_id: jobId, brief, keywords, min_words: 0 }, 100000000000000n, utils.format.parseNearAmount('0.01'))] });
+    payment = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('pay_job', { job_id: jobId, winner: agent_id, score: v.medianScore, job_def_id: defId }, 100000000000000n, 0n)] });
+  }
+  return text({ worker: llm.worker, model: llm.model, pass: v.pass, runs: v.runs, scores: v.scores, medianScore: v.medianScore, frontier: frontier ? frontier.best_score : null, gates: v.medianGates, payment });
 });
 await server.connect(new StdioServerTransport());

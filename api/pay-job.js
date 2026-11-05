@@ -1,20 +1,28 @@
 // POST /api/pay-job — automatic payment for a passed Genesis site job.
 //
-// Flow: the site sends the job result (token, connected account, model
-// output, brief, keywords). This function
-//   1. recomputes sha256(output) — the output hash is the job id,
-//   2. verifies the output with the STRICT rule (same three gates as
+// Flow: the site sends the job result (token, connected account, 1-3 model
+// outputs, source text, brief, keywords). This function
+//   1. recomputes sha256 of the median output — that hash is the job id,
+//   2. verifies every output with the STRICT rule (same three gates as
 //      engine.js verifyStrict and app.js verifyStrictBrowser — keep the
 //      thresholds identical): every keyword inside a sentence of >= 8
 //      words, under 30% of output words copied from the source in 8-word
 //      sequences, at least 3 sentences. There is NO word count.
-//   3. checks the token exists on the shared NFT contract,
-//   4. dedups through the Genesis Core escrow: get_job(hash) — if the job
-//      is already "paid" it refuses; if it is "open" (a previous payment
-//      attempt posted the escrow but paying failed) it resumes at pay_job;
-//      otherwise it posts the job with 0.01 NEAR locked as escrow and then
-//      pays it to the connected account.
-//   5. returns the verdict either way: PASS + pay tx, or FAIL + no payment.
+//      Labinius-style, ALL runs must pass and the attempt is scored by the
+//      MEDIAN score (one lucky output cannot win).
+//   3. recomputes the job-definition id (sha256 of brief + keywords +
+//      source) and reads the onchain frontier for it: the median score
+//      must BEAT the best score on that job, or no payment is made.
+//   4. checks the token exists on the shared NFT contract,
+//   5. dedups through the Genesis Core escrow: get_job(median hash) — if
+//      the job is already "paid" it refuses; if it is "open" (a previous
+//      payment attempt posted the escrow but paying failed) it resumes at
+//      pay_job; otherwise it posts the job with 0.01 NEAR locked as escrow
+//      and then pays it to the connected account, passing the median score
+//      and job-definition id so the contract records the new frontier.
+//   6. returns the verdict either way: PASS + pay tx, or FAIL + no payment.
+// The Core contract's Job.min_words field is posted as 0 — it is stored
+// onchain but verification no longer uses it.
 //
 // Honest limits (v1):
 // - The treasury key comes ONLY from Vercel env vars (TREASURY_PRIVATE_KEY,
@@ -66,7 +74,38 @@ function verifyStrict(source, keywords, output) {
   const copiedShare = outTokens.length ? copiedWords / outTokens.length : 0;
   const originality = { passed: copiedShare < 0.30, copiedShare: +copiedShare.toFixed(2), copiedWords, totalWords: outTokens.length };
   const structure = { passed: sentences.length >= 3, sentences: sentences.length };
-  return { pass: coverage.passed && originality.passed && structure.passed, gates: { coverage, originality, structure } };
+  const pass = coverage.passed && originality.passed && structure.passed;
+  // Deterministic quality score (labinius-style: one measured number).
+  const score = coverage.covered * 100
+    + Math.min(originality.totalWords, 200)
+    + Math.round((1 - copiedShare) * 100);
+  return { pass, score, gates: { coverage, originality, structure } };
+}
+
+// Labinius-style multi-run check: every submitted output must pass the
+// gates; the attempt is scored by the MEDIAN score. One lucky output
+// cannot win. Returns the median output (the one paid on) and its gates.
+function verifyRuns(source, keywords, outputs) {
+  const results = outputs.map((output) => ({ output, v: verifyStrict(source, keywords, output) }));
+  const allPass = results.length > 0 && results.every((r) => r.v.pass);
+  const scores = results.map((r) => r.v.score).sort((a, b) => a - b);
+  const medianScore = scores.length ? scores[Math.floor(scores.length / 2)] : 0;
+  const median = results.find((r) => r.v.score === medianScore) || results[0];
+  return {
+    pass: allPass,
+    medianScore,
+    medianOutput: median ? median.output : '',
+    medianGates: median ? median.v.gates : null,
+    scores: results.map((r) => r.v.score),
+    runs: results.length,
+  };
+}
+
+function jobDefId(brief, keywords, source) {
+  return crypto
+    .createHash('sha256')
+    .update((brief || '') + '|' + keywords.join(',') + '|' + (source || ''))
+    .digest('hex');
 }
 
 async function rpcView(contractId, method, args) {
@@ -99,15 +138,23 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'bad JSON body' });
     }
   }
-  const { token_id, account_id, output, source, brief, keywords } = body || {};
+  const { token_id, account_id, output, outputs, source, brief, keywords } = body || {};
   if (typeof token_id !== 'string' || !token_id.trim()) {
     return res.status(400).json({ ok: false, error: 'token_id is required' });
   }
   if (typeof account_id !== 'string' || !account_id.trim()) {
     return res.status(400).json({ ok: false, error: 'account_id is required' });
   }
-  if (typeof output !== 'string' || output.length < 40 || output.length > 10000) {
-    return res.status(400).json({ ok: false, error: 'output must be 40-10000 characters' });
+  // Labinius-style: the client submits 1-3 fresh runs of the same job
+  // (a single `output` is accepted as one run, for the copy fallback).
+  const runs = Array.isArray(outputs) && outputs.length ? outputs : (output ? [output] : []);
+  if (runs.length < 1 || runs.length > 3) {
+    return res.status(400).json({ ok: false, error: 'outputs must be 1-3 runs' });
+  }
+  for (const o of runs) {
+    if (typeof o !== 'string' || o.length < 40 || o.length > 10000) {
+      return res.status(400).json({ ok: false, error: 'each output must be 40-10000 characters' });
+    }
   }
   if (typeof source !== 'string' || source.length < 40 || source.length > 10000) {
     return res.status(400).json({ ok: false, error: 'source must be 40-10000 characters' });
@@ -117,11 +164,33 @@ module.exports = async (req, res) => {
     return res.status(400).json({ ok: false, error: 'keywords must be 1-10 strings' });
   }
 
-  const outputHash = crypto.createHash('sha256').update(output).digest('hex');
-  const v = verifyStrict(source, kws, output);
-  const verdict = { output_hash: outputHash, gates: v.gates, verdict: v.pass ? 'PASS' : 'FAIL' };
+  const v = verifyRuns(source, kws, runs);
+  const defId = jobDefId(brief, kws, source);
+  const outputHash = crypto.createHash('sha256').update(v.medianOutput).digest('hex');
+  const verdict = {
+    output_hash: outputHash,
+    job_def_id: defId,
+    runs: v.runs,
+    scores: v.scores,
+    median_score: v.medianScore,
+    gates: v.medianGates,
+    verdict: v.pass ? 'PASS' : 'FAIL',
+  };
   if (!v.pass) {
     return res.status(200).json({ ok: false, error: 'job did not pass verification', ...verdict });
+  }
+
+  // Labinius rule: the median score must BEAT the onchain frontier for
+  // this job definition. The first paying score sets it.
+  let frontier = null;
+  try { frontier = await rpcView(CORE_CONTRACT, 'get_frontier', { job_def_id: defId }); } catch (_) {}
+  if (frontier && v.medianScore <= frontier.best_score) {
+    return res.status(200).json({
+      ok: false,
+      error: `median score ${v.medianScore} does not beat the frontier ${frontier.best_score}`,
+      frontier: frontier.best_score,
+      ...verdict,
+    });
   }
 
   // The token must exist on the shared NFT contract.
@@ -168,12 +237,15 @@ module.exports = async (req, res) => {
     const paid = await treasury.functionCall({
       contractId: CORE_CONTRACT,
       methodName: 'pay_job',
-      args: { job_id: outputHash, winner: account_id },
+      // The contract enforces the frontier too, so a race cannot pay a
+      // beaten score; it also records this score as the new frontier.
+      args: { job_id: outputHash, winner: account_id, score: v.medianScore, job_def_id: defId },
       gas: GAS,
     });
     return res.status(200).json({
       ok: true,
       ...verdict,
+      frontier: frontier ? frontier.best_score : null,
       post_tx: postTx,
       pay_tx: paid.transaction.hash,
       paid_to: account_id,
