@@ -322,7 +322,42 @@
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
         ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: PASS' +
         ' · Output hash: ' + hash + ' · Output: ' + res.output;
-      if (payEl) payEl.textContent = 'Passed. Payment is not automatic here — copy the result below and send it to Everest in chat; he verifies the hash and pays 0.01 NEAR from the treasury to ' + accountId + '.';
+      // Automatic payment: send the verified result to the server function,
+      // which re-checks the output hash and the verdict and pays 0.01 NEAR
+      // from the treasury through the Core escrow. The copy button stays as
+      // a fallback if the automatic payment is unavailable or fails.
+      if (payEl) payEl.textContent = 'Passed. Paying automatically…';
+      let paid = false;
+      try {
+        const payRes = await fetch('/api/pay-job', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token_id: tokenId,
+            account_id: accountId,
+            output: res.output,
+            brief: $('agentJobBrief').value,
+            keywords: $('agentJobKeywords').value,
+            min_words: parseInt($('agentJobMin').value, 10),
+          }),
+        });
+        const pay = await payRes.json();
+        if (pay && pay.ok) {
+          paid = true;
+          if (payEl) {
+            payEl.innerHTML =
+              'Paid 0.01 NEAR automatically to ' + accountId + '. Tx: <a href="https://testnet.nearblocks.io/txns/' + pay.pay_tx + '" target="_blank" rel="noopener">' +
+              pay.pay_tx.slice(0, 12) + '…</a>';
+            payEl.style.color = 'var(--green)';
+          }
+        } else if (payEl) {
+          payEl.textContent = 'Automatic payment failed: ' + (pay && pay.error ? pay.error : 'unknown error') +
+            ' — copy the result below and send it to Everest in chat instead.';
+        }
+      } catch (_) {
+        if (payEl) payEl.textContent = 'Automatic payment is not reachable right now — copy the result below and send it to Everest in chat instead.';
+      }
+      if (paid) return;
       if (copyBtn) {
         copyBtn.style.display = '';
         copyBtn.onclick = async () => {

@@ -10,7 +10,8 @@ const path = require('path');
 const vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
-const calls = { connect: [], restore: [], disconnect: [], sendTransaction: [] };
+const calls = { connect: [], restore: [], disconnect: [], sendTransaction: [], payJob: [] };
+const POLLINATIONS_OUTPUT = 'NEAR is a blockchain where anyone can mint an NFT. The shared NFT contract on NEAR testnet lets an agent mint a token with metadata. To mint, call nft_mint with a token id and a receiver. NEAR NFTs follow the NEP-171 standard and the mint deposit covers storage.';
 
 // One shared mocked wallet, like localStorage surviving a page navigation.
 const sharedWallet = {
@@ -66,6 +67,13 @@ function loadPage() {
     console,
     navigator: {},
     fetch: async (url, opts) => {
+      if (typeof url === 'string' && url.startsWith('https://text.pollinations.ai/')) {
+        return { ok: true, text: async () => POLLINATIONS_OUTPUT };
+      }
+      if (url === '/api/pay-job') {
+        calls.payJob.push(JSON.parse(opts.body));
+        return { json: async () => ({ ok: true, verdict: 'PASS', pay_tx: 'payhash123', output_hash: 'abc' }) };
+      }
       // Simulated testnet RPC: only genesis-visitor-1 already exists.
       let tokenId = '';
       try {
@@ -80,6 +88,7 @@ function loadPage() {
     },
     btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     TextDecoder: globalThis.TextDecoder,
+    TextEncoder: globalThis.TextEncoder,
     crypto: globalThis.crypto,
   };
   sandbox.window = {
@@ -145,5 +154,20 @@ function fail(msg) { console.log('FAIL:', msg); process.exit(1); }
   await page3.windowListeners.load();
   console.log('6. page 3 token field after load:', JSON.stringify(page3.$('mintToken').value));
   if (page3.$('mintToken').value !== 'genesis-visitor-2') fail('form did not suggest a free token id');
+
+  // 7. A PASS auto-pays through /api/pay-job (no copy needed).
+  const page4 = loadPage();
+  await page4.windowListeners.load();
+  page4.$('agentJobToken').value = 'genesis-visitor-2';
+  page4.$('agentJobBrief').value = 'NEAR NFTs global contract mint';
+  page4.$('agentJobKeywords').value = 'near, nft, mint';
+  page4.$('agentJobMin').value = '20';
+  await page4.$('runAgentJobBtn').listeners.click();
+  console.log('7. pay-job calls:', calls.payJob.length,
+    '| pay status:', JSON.stringify(page4.$('agentJobPay').innerHTML.slice(0, 60)));
+  if (calls.payJob.length !== 1) fail('agent job did not call the payment service');
+  const payBody = calls.payJob[0];
+  if (payBody.token_id !== 'genesis-visitor-2' || payBody.account_id !== 'isaiah.testnet') fail('payment service got the wrong token/account');
+  if (!page4.$('agentJobPay').innerHTML.includes('Paid 0.01 NEAR automatically')) fail('no paid confirmation shown');
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

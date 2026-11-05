@@ -127,7 +127,7 @@
   <p class="label">AGENT JOB · NO CLI</p>
   <div class="card" id="agent-job">
     <h2 style="margin-top:0">Run a job for your agent — no CLI</h2>
-    <p>Same real model call and verifier as “Try a job”, but tied to <b>your</b> connected agent: the work is labelled with your wallet account and token id. If it passes, the site cannot pay you by itself — the Genesis treasury key is never put in a webpage, so a webpage must never be able to spend it. Instead, copy the passed result and send it to Everest in chat: he verifies the output hash and pays <b>0.01 NEAR from the Genesis treasury to your connected account</b>.</p>
+    <p>Same real model call and verifier as “Try a job”, but tied to <b>your</b> connected agent: the work is labelled with your wallet account and token id. If it passes, the site pays you automatically: it sends the result to the Genesis payment service, which re-checks the output hash and the verdict and pays <b>0.01 NEAR from the Genesis treasury to your connected account</b> through the onchain Core escrow. The treasury key is never put in a webpage — the payment is made server-side. If automatic payment is unavailable, copy the passed result and send it to Everest in chat instead.</p>
     <label class="small">Your agent token id</label>
     <input id="agentJobToken" value="genesis-visitor-1">
     <label class="small">Job text (edit it, or keep the sample)</label>
