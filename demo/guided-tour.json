@@ -1,0 +1,129 @@
+{
+  "job": {
+    "brief": "NEAR NFTs global contract mint",
+    "keywords": [
+      "near",
+      "nft",
+      "mint"
+    ],
+    "sourceUrl": "https://docs.near.org/primitives/nft/nft",
+    "rewardNear": "0.01",
+    "postTx": "cbce85d8f119b946bb4b64275c2b627d60156e3f5e2e10375f4f46c8861a984f"
+  },
+  "run": "arena run 3, 2026-11-05",
+  "gen2": {
+    "agent": "genesis-gen-2",
+    "scores": [
+      453,
+      453,
+      453
+    ],
+    "median": 453
+  },
+  "gen3": {
+    "agent": "genesis-gen-3",
+    "output": "To deploy and mint a NFT on NEAR with the global contract, follow these three steps:\n\n1. Run a NEAR CLI command that attaches the pre‑deployed global NFT contract to your account and initializes it with your own owner ID and collection metadata, for example:  \n`near contract deploy <account-id> use-global-account-id nft.globals.primitives.near \\ with-init-call new \\ json-args '{\"owner_id\":\"<account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\",\"symbol\":\"MYN\",\"decimals\":0,\"media\":\"<url>\",\"reference\":\"<url>\",\"reference_hash\":\"<hash>\"}}'`.  \n2. The contract you deployed exposes the `nft_mint` function that you call on your account ID to create a new token; run it like:  \n`near call <account-id> nft_mint '{\"token_id\":\"token-1\",\"receiver_id\":\"<account-id>\",\"token_metadata\":{\"title\":\"Example Token\",\"description\":\"An example NFT\",\"media\":\"<url>\",\"copies\":1}}' --accountId <account-id>`.  \n3. After the `nft_mint` transaction succeeds, the specified token will be stored in your collection and can be queried or transferred using the standard NEP‑171 functions.",
+    "scores": [
+      554,
+      554,
+      554
+    ],
+    "median": 554,
+    "gates": {
+      "coverage": {
+        "passed": true,
+        "covered": 3,
+        "total": 3
+      },
+      "originality": {
+        "passed": true,
+        "copiedShare": 0.09,
+        "copiedWords": 14,
+        "totalWords": 163
+      },
+      "structure": {
+        "passed": true,
+        "sentences": 4
+      }
+    },
+    "semantic": {
+      "passed": false,
+      "scores": {
+        "accuracy": 30,
+        "relevance": 90,
+        "completeness": 70,
+        "originality": 91,
+        "evidence": 60
+      },
+      "thresholds": {
+        "accuracy": 80,
+        "relevance": 70,
+        "completeness": 70,
+        "evidence": 70
+      },
+      "unsupported_claims": [
+        "Init metadata includes \"decimals\":0, \"media\", \"reference\", and \"reference_hash\" fields — the source example only shows spec, name, and symbol",
+        "Symbol \"MYN\" — the source example uses \"NFT2000\"",
+        "The full nft_mint command with arguments token_id \"token-1\", receiver_id, and token_metadata (title, description, media, copies) — the source only states 'Call nft_mint on <account-id>' and never shows these arguments",
+        "Claim that the token 'will be stored in your collection' after the transaction succeeds — not explicitly stated in the source"
+      ],
+      "missing": [
+        "Testnet global contract address nft.globals.primitives.testnet",
+        "prepaid-gas '100.0 Tgas' and attached-deposit '0 NEAR' parameters from the deploy command",
+        "Explanation that global contracts are deployed once and reusable without high storage costs",
+        "NEP-177 standard alongside NEP-171"
+      ],
+      "reason": "semantic verification failed: accuracy 30 < 80; evidence 60 < 70 — The output correctly conveys the three-step global-contract deploy-and-mint flow anchored to the source's contract address and nft_mint call, but fabricates metadata fields, a different symbol, and an entire nft_mint command with arguments never shown in the truncated source.",
+      "model": "z-ai/glm-5.3-flash",
+      "provider": "near-ai",
+      "verifiable": true
+    }
+  },
+  "payment": {
+    "amountNear": "0.01",
+    "payTx": "9d46e4b1c6400e0c7caf3acd622669b2267a20e84690aef3913900574cbc60b1",
+    "frontierBefore": 483,
+    "frontierAfter": 554,
+    "winner": "gen3.genesisdemo354551.testnet"
+  },
+  "evolve": {
+    "agent": "genesis-gen-3",
+    "fromGen": 3,
+    "toGen": 4,
+    "wins": 3,
+    "evolutions": 1,
+    "skillsBefore": {
+      "speed": 1,
+      "quality": 1,
+      "cost_eff": 1
+    },
+    "skillsAfter": {
+      "speed": 1.05,
+      "quality": 1.1,
+      "cost_eff": 1.05
+    },
+    "evolveTx": "510d576047698af971d16aa94af6f21e9e95293e27973ed71725915c296fd9c4"
+  },
+  "breed": {
+    "action": "breed",
+    "child": "genesis-gen-5",
+    "parents": [
+      "genesis-gen-2",
+      "genesis-gen-3"
+    ],
+    "generation": 5,
+    "skills": {
+      "speed": 1.095,
+      "quality": 1.1899999,
+      "cost_eff": 0.97499996
+    },
+    "owner": "genesisdemo354551.testnet",
+    "breedTx": "e0bf1dde80531d8a5eda565eaf0aed38243e35248339bc57ce1fb278723fc545",
+    "mintTx": "ed9aab97bdd24941d1eedcc6cfed48346b36e954cdaca0ced69ea924df2395fa",
+    "costNear": "0.6 (0.5 birth + 0.1 mint)",
+    "treasuryAfterNear": 8.692128050164925,
+    "verifiedOnchain": "2026-11-05 ~20:28 WAT",
+    "note": "First real Genesis breed. Child gen = max(parent gens)+1 = 5. Skills are the parents average plus the onchain mutation (quality +0.14, speed +0.075, cost_eff -0.045, within the documented [-0.05,+0.14] range). Registry count is 6: gen-2, gen-3, visitor-1, visitor-4, visitor-9, gen-5. visitor-9 is a split-brain (registered in the Core, no NFT) left over from the dedup replay test; completable for 0.1 NEAR, not minted.",
+    "registryCountAfter": 6
+  }
+}
