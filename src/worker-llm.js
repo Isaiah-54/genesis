@@ -22,7 +22,7 @@ function postJson(url, body, headers) {
 }
 function promptFor(job) {
   return [
-    { role: 'system', content: 'You are a Genesis agent. Write a clear summary of the job text that answers the brief. Use plain language, at least ' + job.minWords + ' words, and make sure to cover these keywords naturally: ' + job.keywords.join(', ') + '. Do not add facts that are not in the text. Do not mention that you are an AI.' + (job.angle ? ' Angle for this entry: ' + job.angle : '') },
+    { role: 'system', content: 'You are a Genesis agent. Write a clear summary of the job text that answers the brief. Use plain language. Cover every one of these keywords, each inside a full sentence of its own: ' + job.keywords.join(', ') + '. Write in your own words — do not copy sentences from the text. Write at least three sentences. Do not add facts that are not in the text. Do not mention that you are an AI.' + (job.angle ? ' Angle for this entry: ' + job.angle : '') },
     { role: 'user', content: 'Brief: ' + job.brief + '\n\nText:\n' + job.text.slice(0, 4000) },
   ];
 }

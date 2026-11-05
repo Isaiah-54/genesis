@@ -241,7 +241,44 @@
     }
   }
 
-  async function runBrowserJob(text, brief, keywords, minWords) {
+  // Strict verifier for real paid work — same three gates as engine.js
+  // verifyStrict and api/pay-job.js (keep the thresholds identical):
+  //   1. Coverage: EVERY keyword, each inside a sentence of >= 8 words.
+  //   2. Originality: under 30% of output words inside 8-word sequences
+  //      copied from the source text. Copy-paste fails.
+  //   3. Structure: at least 3 sentences. No word count anywhere.
+  function verifyStrictBrowser(source, keywords, output) {
+    const kw = keywords.map((k) => k.toLowerCase());
+    const tokensOf = (t) => (t || '').toLowerCase().match(/[a-z0-9_]+/g) || [];
+    const sentencesOf = (t) => (t || '').split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => tokensOf(s).length >= 3);
+    const outTokens = tokensOf(output);
+    const sentences = sentencesOf(output);
+    const keywordOk = kw.map((k) =>
+      sentences.some((s) => s.toLowerCase().includes(k) && tokensOf(s).length >= 8));
+    const coverage = { passed: keywordOk.every(Boolean), covered: keywordOk.filter(Boolean).length, total: kw.length };
+    const srcTokens = tokensOf(source);
+    const srcShingles = new Set();
+    for (let i = 0; i + 8 <= srcTokens.length; i++) srcShingles.add(srcTokens.slice(i, i + 8).join(' '));
+    const coveredPos = new Array(outTokens.length).fill(false);
+    for (let i = 0; i + 8 <= outTokens.length; i++) {
+      if (srcShingles.has(outTokens.slice(i, i + 8).join(' '))) {
+        for (let j = i; j < i + 8; j++) coveredPos[j] = true;
+      }
+    }
+    const copiedWords = coveredPos.filter(Boolean).length;
+    const copiedShare = outTokens.length ? copiedWords / outTokens.length : 0;
+    const originality = { passed: copiedShare < 0.30, copiedShare: +copiedShare.toFixed(2), copiedWords, totalWords: outTokens.length };
+    const structure = { passed: sentences.length >= 3, sentences: sentences.length };
+    return { pass: coverage.passed && originality.passed && structure.passed, gates: { coverage, originality, structure } };
+  }
+
+  function gatesText(g) {
+    return 'Coverage ' + g.coverage.covered + '/' + g.coverage.total +
+      ' · Originality ' + Math.round(g.originality.copiedShare * 100) + '% copied' +
+      ' · Structure ' + g.structure.sentences + ' sentences';
+  }
+
+  async function runBrowserJob(text, brief, keywords) {
     const kw = keywords.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
     let output = '';
     let worker = 'extractive-fallback';
@@ -249,9 +286,9 @@
       const prompt =
         'Summarise the following for a brief about "' +
         brief +
-        '". Use the keywords: ' +
+        '". Cover every one of these keywords, each inside a full sentence of its own: ' +
         kw.join(', ') +
-        '. Text:\n\n' +
+        '. Write in your own words — do not copy sentences from the text. Write at least three sentences. Text:\n\n' +
         text.slice(0, 2500);
       const r = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt));
       if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; }
@@ -269,10 +306,8 @@
         '[extractive-fallback] ' +
         (scored.slice(0, 3).map((x) => x.s).join(' ') || text.slice(0, 200));
     }
-    const words = (output.toLowerCase().match(/[a-z]+/g) || []).length;
-    const covered = kw.filter((k) => output.toLowerCase().includes(k)).length;
-    const pass = words >= (minWords || 20) && covered >= Math.ceil(Math.max(kw.length, 1) * 0.5);
-    return { output, words, covered, total: kw.length, pass, worker };
+    const v = verifyStrictBrowser(text, kw, output);
+    return { output, words: v.gates.originality.totalWords, gates: v.gates, pass: v.pass, worker };
   }
 
   async function sha256Hex(text) {
@@ -303,13 +338,12 @@
       const res = await runBrowserJob(
         $('agentJobText').value,
         $('agentJobBrief').value,
-        $('agentJobKeywords').value,
-        parseInt($('agentJobMin').value, 10)
+        $('agentJobKeywords').value
       );
       out.textContent = res.output;
       verdict.textContent =
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
-        ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: ' +
+        ' · ' + gatesText(res.gates) + ' · Verdict: ' +
         (res.pass ? 'PASS' : 'FAIL');
       verdict.style.color = res.pass ? 'var(--green)' : 'var(--red)';
       const hash = await sha256Hex(res.output);
@@ -320,7 +354,7 @@
       }
       const payload =
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
-        ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: PASS' +
+        ' · ' + gatesText(res.gates) + ' · Verdict: PASS' +
         ' · Output hash: ' + hash + ' · Output: ' + res.output;
       // Automatic payment: send the verified result to the server function,
       // which re-checks the output hash and the verdict and pays 0.01 NEAR
@@ -336,9 +370,9 @@
             token_id: tokenId,
             account_id: accountId,
             output: res.output,
+            source: $('agentJobText').value,
             brief: $('agentJobBrief').value,
             keywords: $('agentJobKeywords').value,
-            min_words: parseInt($('agentJobMin').value, 10),
           }),
         });
         const pay = await payRes.json();
@@ -378,19 +412,13 @@
       const res = await runBrowserJob(
         $('jobText').value,
         $('jobBrief').value,
-        $('jobKeywords').value,
-        parseInt($('jobMin').value, 10)
+        $('jobKeywords').value
       );
       out.textContent = res.output;
       verdict.textContent =
         (res.pass ? 'PASS' : 'FAIL') +
         ' · ' +
-        res.words +
-        ' words · ' +
-        res.covered +
-        '/' +
-        res.total +
-        ' keywords';
+        gatesText(res.gates);
       verdict.style.color = res.pass ? 'var(--green)' : 'var(--red)';
     });
   }

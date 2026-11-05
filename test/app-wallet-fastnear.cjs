@@ -11,7 +11,13 @@ const vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
 const calls = { connect: [], restore: [], disconnect: [], sendTransaction: [], payJob: [] };
-const POLLINATIONS_OUTPUT = 'NEAR is a blockchain where anyone can mint an NFT. The shared NFT contract on NEAR testnet lets an agent mint a token with metadata. To mint, call nft_mint with a token id and a receiver. NEAR NFTs follow the NEP-171 standard and the mint deposit covers storage.';
+// Good output for scenario 7: all three keywords inside full sentences,
+// written in its own words (no 8-word sequence copied from the source),
+// three sentences. Passes the strict verifier.
+const GOOD_OUTPUT = 'Anyone can mint a new NFT on the NEAR blockchain, and the resulting token is recorded in the caller\'s wallet for later use. Creating that token means sending an identifier, a destination account, and a small set of descriptive fields to the shared contract, while a storage deposit pays for the data the chain keeps. Because every token follows the public NEP-171 interface, wallets and marketplaces can recognise it without any custom integration code.';
+let mockModelOutput = GOOD_OUTPUT;
+// The default job text on the live site (index.html agentJobText).
+const SOURCE_TEXT = 'NEAR has a shared NFT contract that anyone can mint on. The testnet contract is nft.primitives.testnet. To mint, call nft_mint with a token id, a receiver id, and token metadata including title, description and media. A deposit covers storage. NFTs on NEAR follow the NEP-177 standard with metadata under NEP-177.';
 
 // One shared mocked wallet, like localStorage surviving a page navigation.
 const sharedWallet = {
@@ -68,7 +74,7 @@ function loadPage() {
     navigator: {},
     fetch: async (url, opts) => {
       if (typeof url === 'string' && url.startsWith('https://text.pollinations.ai/')) {
-        return { ok: true, text: async () => POLLINATIONS_OUTPUT };
+        return { ok: true, text: async () => mockModelOutput };
       }
       if (url === '/api/pay-job') {
         calls.payJob.push(JSON.parse(opts.body));
@@ -159,15 +165,42 @@ function fail(msg) { console.log('FAIL:', msg); process.exit(1); }
   const page4 = loadPage();
   await page4.windowListeners.load();
   page4.$('agentJobToken').value = 'genesis-visitor-2';
+  page4.$('agentJobText').value = SOURCE_TEXT;
   page4.$('agentJobBrief').value = 'NEAR NFTs global contract mint';
   page4.$('agentJobKeywords').value = 'near, nft, mint';
-  page4.$('agentJobMin').value = '20';
+  mockModelOutput = GOOD_OUTPUT;
   await page4.$('runAgentJobBtn').listeners.click();
   console.log('7. pay-job calls:', calls.payJob.length,
-    '| pay status:', JSON.stringify(page4.$('agentJobPay').innerHTML.slice(0, 60)));
+    '| pay status:', JSON.stringify(page4.$('agentJobPay').innerHTML.slice(0, 60)),
+    '| verdict:', JSON.stringify(page4.$('agentJobVerdict').textContent));
   if (calls.payJob.length !== 1) fail('agent job did not call the payment service');
   const payBody = calls.payJob[0];
   if (payBody.token_id !== 'genesis-visitor-2' || payBody.account_id !== 'isaiah.testnet') fail('payment service got the wrong token/account');
+  if (typeof payBody.source !== 'string' || !payBody.source.includes('nft_mint')) fail('payment service did not receive the source text');
+  if ('min_words' in payBody) fail('payment service still receives a word count');
   if (!page4.$('agentJobPay').innerHTML.includes('Paid 0.01 NEAR automatically')) fail('no paid confirmation shown');
+  if (!page4.$('agentJobVerdict').textContent.includes('Coverage 3/3')) fail('verdict does not show the coverage gate');
+
+  // 8. A copy-paste of the source text FAILS the originality gate: no
+  // payment call, and the agent is told the job failed verification.
+  mockModelOutput = page4.$('agentJobText').value;
+  const payCallsBefore = calls.payJob.length;
+  await page4.$('runAgentJobBtn').listeners.click();
+  console.log('8. copied output verdict:', JSON.stringify(page4.$('agentJobVerdict').textContent),
+    '| pay-job calls:', calls.payJob.length);
+  if (!page4.$('agentJobVerdict').textContent.includes('FAIL')) fail('copied output passed');
+  if (!page4.$('agentJobVerdict').textContent.includes('100% copied')) fail('verdict does not show the originality gate');
+  if (calls.payJob.length !== payCallsBefore) fail('copied output reached the payment service');
+  if (!page4.$('agentJobPay').textContent.includes('No payment')) fail('no no-payment message for the copied output');
+
+  // 9. Bare keyword stuffing FAILS the coverage gate (keywords are not
+  // inside full sentences) and the structure gate. (The output must be
+  // >= 40 chars, or the site replaces it with the extractive fallback.)
+  mockModelOutput = 'near. nft. mint. near. nft. mint. near. nft. mint. near. nft. mint.';
+  await page4.$('runAgentJobBtn').listeners.click();
+  console.log('9. keyword-stuffed output verdict:', JSON.stringify(page4.$('agentJobVerdict').textContent));
+  if (!page4.$('agentJobVerdict').textContent.includes('FAIL')) fail('keyword stuffing passed');
+  if (!page4.$('agentJobVerdict').textContent.includes('Coverage 0/3')) fail('verdict does not show the failed coverage gate');
+  if (calls.payJob.length !== payCallsBefore) fail('keyword stuffing reached the payment service');
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

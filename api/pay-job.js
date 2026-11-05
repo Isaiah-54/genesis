@@ -3,8 +3,11 @@
 // Flow: the site sends the job result (token, connected account, model
 // output, brief, keywords). This function
 //   1. recomputes sha256(output) — the output hash is the job id,
-//   2. verifies the output the same way the site/CLI verifier does
-//      (words >= min_words, keywords covered >= half),
+//   2. verifies the output with the STRICT rule (same three gates as
+//      engine.js verifyStrict and app.js verifyStrictBrowser — keep the
+//      thresholds identical): every keyword inside a sentence of >= 8
+//      words, under 30% of output words copied from the source in 8-word
+//      sequences, at least 3 sentences. There is NO word count.
 //   3. checks the token exists on the shared NFT contract,
 //   4. dedups through the Genesis Core escrow: get_job(hash) — if the job
 //      is already "paid" it refuses; if it is "open" (a previous payment
@@ -35,13 +38,35 @@ const RPC_URL = 'https://rpc.testnet.near.org';
 const REWARD_NEAR = '0.01';
 const GAS = BigInt('100000000000000'); // 100 TGas
 
-function wordsOf(text) {
-  return (text.toLowerCase().match(/[a-z]+/g) || []).length;
+function tokensOf(text) {
+  return (text || '').toLowerCase().match(/[a-z0-9_]+/g) || [];
 }
 
-function keywordsCovered(text, kws) {
-  const low = text.toLowerCase();
-  return kws.filter((k) => low.includes(k)).length;
+function sentencesOf(text) {
+  return (text || '').split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => tokensOf(s).length >= 3);
+}
+
+function verifyStrict(source, keywords, output) {
+  const kw = keywords.map((k) => String(k).toLowerCase());
+  const outTokens = tokensOf(output);
+  const sentences = sentencesOf(output);
+  const keywordOk = kw.map((k) =>
+    sentences.some((s) => s.toLowerCase().includes(k) && tokensOf(s).length >= 8));
+  const coverage = { passed: keywordOk.every(Boolean), covered: keywordOk.filter(Boolean).length, total: kw.length };
+  const srcTokens = tokensOf(source);
+  const srcShingles = new Set();
+  for (let i = 0; i + 8 <= srcTokens.length; i++) srcShingles.add(srcTokens.slice(i, i + 8).join(' '));
+  const coveredPos = new Array(outTokens.length).fill(false);
+  for (let i = 0; i + 8 <= outTokens.length; i++) {
+    if (srcShingles.has(outTokens.slice(i, i + 8).join(' '))) {
+      for (let j = i; j < i + 8; j++) coveredPos[j] = true;
+    }
+  }
+  const copiedWords = coveredPos.filter(Boolean).length;
+  const copiedShare = outTokens.length ? copiedWords / outTokens.length : 0;
+  const originality = { passed: copiedShare < 0.30, copiedShare: +copiedShare.toFixed(2), copiedWords, totalWords: outTokens.length };
+  const structure = { passed: sentences.length >= 3, sentences: sentences.length };
+  return { pass: coverage.passed && originality.passed && structure.passed, gates: { coverage, originality, structure } };
 }
 
 async function rpcView(contractId, method, args) {
@@ -74,7 +99,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'bad JSON body' });
     }
   }
-  const { token_id, account_id, output, brief, keywords, min_words } = body || {};
+  const { token_id, account_id, output, source, brief, keywords } = body || {};
   if (typeof token_id !== 'string' || !token_id.trim()) {
     return res.status(400).json({ ok: false, error: 'token_id is required' });
   }
@@ -84,21 +109,18 @@ module.exports = async (req, res) => {
   if (typeof output !== 'string' || output.length < 40 || output.length > 10000) {
     return res.status(400).json({ ok: false, error: 'output must be 40-10000 characters' });
   }
+  if (typeof source !== 'string' || source.length < 40 || source.length > 10000) {
+    return res.status(400).json({ ok: false, error: 'source must be 40-10000 characters' });
+  }
   const kws = Array.isArray(keywords) ? keywords.map(String).filter(Boolean) : [];
   if (!kws.length || kws.length > 10) {
     return res.status(400).json({ ok: false, error: 'keywords must be 1-10 strings' });
   }
-  const minWords = Number(min_words) || 20;
-  if (minWords < 1 || minWords > 500) {
-    return res.status(400).json({ ok: false, error: 'min_words must be 1-500' });
-  }
 
   const outputHash = crypto.createHash('sha256').update(output).digest('hex');
-  const words = wordsOf(output);
-  const covered = keywordsCovered(output, kws.map((k) => k.toLowerCase()));
-  const pass = words >= minWords && covered >= Math.ceil(Math.max(kws.length, 1) * 0.5);
-  const verdict = { output_hash: outputHash, words, covered, total: kws.length, verdict: pass ? 'PASS' : 'FAIL' };
-  if (!pass) {
+  const v = verifyStrict(source, kws, output);
+  const verdict = { output_hash: outputHash, gates: v.gates, verdict: v.pass ? 'PASS' : 'FAIL' };
+  if (!v.pass) {
     return res.status(200).json({ ok: false, error: 'job did not pass verification', ...verdict });
   }
 
@@ -136,7 +158,8 @@ module.exports = async (req, res) => {
       const posted = await treasury.functionCall({
         contractId: CORE_CONTRACT,
         methodName: 'post_job',
-        args: { job_id: outputHash, brief: String(brief || ''), keywords: kws, min_words: minWords },
+        // min_words is a stored Core field; verification no longer uses it.
+        args: { job_id: outputHash, brief: String(brief || ''), keywords: kws, min_words: 0 },
         gas: GAS,
         attachedDeposit: utils.format.parseNearAmount(REWARD_NEAR),
       });

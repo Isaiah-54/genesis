@@ -17,7 +17,7 @@ import nearApi from 'near-api-js';
 import { mediaForGen } from './nft-media.js';
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = nearApi;
 import engine from './engine.js';
-const { verify } = engine;
+const { verify, verifyStrict } = engine;
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { workLLM } = require('./worker-llm.js');
@@ -94,12 +94,12 @@ server.tool('genesis_transfer_nft', 'Transfer a Genesis NFT to a new owner. Work
 server.tool('genesis_job', 'Run a real Genesis job: fetch a live page, summarise it with the repo worker, verify it, and pay the agent 0.01 testnet NEAR on PASS. No payment on FAIL.', { agent_id: z.string(), page_url: z.string(), brief: z.string(), keywords: z.array(z.string()) }, async ({ agent_id, page_url, brief, keywords }) => {
   const page = execSync(`curl -s -m 30 ${page_url} | perl -0777 -pe 's/<script.*?<\\/script>//gs; s/<style.*?<\\/style>//gs' | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
   if (page.length < 500) throw new Error('Fetched page too short for a real job');
-  const job = { brief, minWords: 20, keywords, text: page.slice(0, 3000) };
+  const job = { brief, keywords, text: page.slice(0, 3000) };
   const llm = await workLLM(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
   const output = llm.output;
-  const v = verify(job, output);
+  const v = verifyStrict(job, output);
   let payment = null;
   if (v.pass) payment = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: agent_id, actions: [transactions.transfer(utils.format.parseNearAmount('0.01'))] });
-  return text({ worker: llm.worker, model: llm.model, pass: v.pass, words: v.words, keywordsCovered: `${v.keywordsCovered}/${v.keywordsTotal}`, payment });
+  return text({ worker: llm.worker, model: llm.model, pass: v.pass, gates: v.gates, payment });
 });
 await server.connect(new StdioServerTransport());

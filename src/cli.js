@@ -16,7 +16,7 @@
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = require('near-api-js');
-const { work, verify } = require('./engine');
+const { work, verify, verifyStrict } = require('./engine');
 const { workLLM } = require('./worker-llm');
 const { mediaForGen } = require('./nft-media.js');
 const MASTER = 'genesisdemo354551.testnet';
@@ -142,13 +142,16 @@ async function main() {
   if (cmd === 'job') {
     const page = execSync(`curl -s -m 30 ${a[2]} | perl -0777 -pe 's/<script.*?<\\/script>//gs; s/<style.*?<\\/style>//gs' | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
     if (page.length < 500) throw new Error('Fetched page too short for a real job');
-    const job = { brief: 'NEAR NFTs global contract mint', minWords: 20, keywords: ['near', 'nft', 'mint'], text: page.slice(0, 3000) };
+    const job = { brief: 'NEAR NFTs global contract mint', keywords: ['near', 'nft', 'mint'], text: page.slice(0, 3000) };
     const llm = await workLLM(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
     const output = llm.output;
-    const v = verify(job, output);
+    const v = verifyStrict(job, output);
     console.log('Worker:', llm.worker, '| model:', llm.model);
     console.log('Output preview:', output.slice(0, 300));
-    console.log('Verify:', v.pass ? 'PASS' : 'FAIL', v.words, 'words,', `${v.keywordsCovered}/${v.keywordsTotal}`, 'keywords');
+    console.log('Verify:', v.pass ? 'PASS' : 'FAIL',
+      '| coverage:', `${v.gates.coverage.covered}/${v.gates.coverage.total} keywords in full sentences`,
+      '| originality:', `${Math.round(v.gates.originality.copiedShare * 100)}% copied`,
+      '| structure:', `${v.gates.structure.sentences} sentences`);
     if (!v.pass) { console.log('No payment — job failed verification.'); return; }
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: a[1], actions: [transactions.transfer(utils.format.parseNearAmount('0.01'))], dryRun, label: 'job payment to ' + a[1] }));
     return;

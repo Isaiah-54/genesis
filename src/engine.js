@@ -107,6 +107,11 @@ function work(job, agent) {
 }
 
 function verify(job, output) {
+  // Legacy rule, kept ONLY for the offline lifecycle simulator (doJob and
+  // the demo scripts): words >= minWords and at least half the keywords.
+  // It is deliberately lenient so the demos can show the full
+  // born → earn → reproduce → die lifecycle offline. Real paid work does
+  // NOT use this — it uses verifyStrict below.
   const words = (output || '').toLowerCase().match(/[a-z]+/g) || [];
   const keywords = job.keywords || [];
   const covered = keywords.filter(k => (output || '').toLowerCase().includes(k.toLowerCase())).length;
@@ -116,6 +121,60 @@ function verify(job, output) {
     words: words.length,
     keywordsCovered: covered,
     keywordsTotal: keywords.length,
+  };
+}
+
+// Strict verifier for real paid work (CLI job, MCP genesis_job, site,
+// api/pay-job). No word count — three gates, all must pass:
+//   1. Coverage: EVERY keyword appears, each inside a sentence of >= 8
+//      words (no bare keyword lists, no one-word sentences).
+//   2. Originality: under 30% of output words sit inside 8-word sequences
+//      copied from the source text (job.text). Copy-paste fails.
+//   3. Structure: at least 3 sentences (each >= 3 words).
+// The same logic is duplicated in app.js and api/pay-job.js (the browser
+// and the serverless function cannot import this module) — keep the
+// thresholds identical in all three places.
+function tokensOf(text) {
+  return (text || '').toLowerCase().match(/[a-z0-9_]+/g) || [];
+}
+
+function sentencesOf(text) {
+  return (text || '').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => tokensOf(s).length >= 3);
+}
+
+function verifyStrict(job, output) {
+  const keywords = (job.keywords || []).map(k => String(k).toLowerCase());
+  const out = output || '';
+  const outTokens = tokensOf(out);
+  const sentences = sentencesOf(out);
+  const keywordOk = keywords.map(k =>
+    sentences.some(s => s.toLowerCase().includes(k) && tokensOf(s).length >= 8));
+  const coverage = {
+    passed: keywordOk.every(Boolean),
+    covered: keywordOk.filter(Boolean).length,
+    total: keywords.length,
+  };
+  const srcTokens = tokensOf(job.text || '');
+  const srcShingles = new Set();
+  for (let i = 0; i + 8 <= srcTokens.length; i++) srcShingles.add(srcTokens.slice(i, i + 8).join(' '));
+  const coveredPos = new Array(outTokens.length).fill(false);
+  for (let i = 0; i + 8 <= outTokens.length; i++) {
+    if (srcShingles.has(outTokens.slice(i, i + 8).join(' '))) {
+      for (let j = i; j < i + 8; j++) coveredPos[j] = true;
+    }
+  }
+  const copiedWords = coveredPos.filter(Boolean).length;
+  const copiedShare = outTokens.length ? copiedWords / outTokens.length : 0;
+  const originality = {
+    passed: copiedShare < 0.30,
+    copiedShare: +copiedShare.toFixed(2),
+    copiedWords,
+    totalWords: outTokens.length,
+  };
+  const structure = { passed: sentences.length >= 3, sentences: sentences.length };
+  return {
+    pass: coverage.passed && originality.passed && structure.passed,
+    gates: { coverage, originality, structure },
   };
 }
 
@@ -208,5 +267,6 @@ module.exports = {
   lifecycle,
   work,
   verify,
+  verifyStrict,
   skillFor,
 };

@@ -162,8 +162,11 @@ the demo script. (Note: changing only job-1 still births, at exactly
 
 ## What the verifier actually checks
 
-Length (minimum words), keyword coverage (at least half the job keywords),
-nothing else. It is a separate code path from the worker, by design.
+No word count. Three gates, all must pass — the same rule in the CLI, MCP, website and payment service:
+1. **Coverage** — every keyword appears, each inside a sentence of at least 8 words.
+2. **Originality** — under 30% of the output's words sit inside 8-word sequences copied from the source text. Copy-paste fails.
+3. **Structure** — at least 3 sentences.
+It is a separate code path from the worker, by design. The offline lifecycle demos use a deliberately lenient legacy rule (words + half the keywords) so they can show the full born → earn → reproduce → die chain offline; real paid work never uses it.
 
 ## Working product (v2, NEAR testnet — real NFTs, real payments)
 
@@ -176,7 +179,7 @@ Clean run, all 7 txs Success and re-verified by RPC
 * genesis-weak-2 → died: owner back to treasury genesisdemo354551.testnet , weak2 balance 0.3496 NEAR after returning 0.15 NEAR
 * MCP server: node src/mcp-server.mjs — tools for token, balance, pay, mint, create-agent, transfer-NFT, job. Tested over stdio: tools list + balance call return live testnet data.
 * Honest limit: the first run's gen0/gen1/gen5 NFTs are on-chain but locked (their subaccount keys were never saved). They are documented in DESIGN.md, not claimed as working agents. The v2 key-save-first rule prevents this.
-* Website wallet mint, end-to-end tested 2026-11-05 by Isaiah himself: token genesis-visitor-1 minted from [https://genesis-roan-eta.vercel.app/](https://genesis-roan-eta.vercel.app/) in Meteor (testnet account otoyo4real.testnet ), owner verified onchain. The same visit then ran a real job for that token (CLI, on his instruction): 50 words, 3/3 keywords, PASS, 0.01 NEAR paid, tx c1f3f1c994c2de6cf38f3e1940166f0005357ddcf331b3b939b48abecc094d51 (proof in demo/visitor-job-run.json ). The website also has a "Run a job for your agent" section: the work and verification run in the visitor's browser, tied to their connected account and token; payment is not automatic there, because the treasury key is never put in a webpage — a passed result (with its sha256 hash) is sent to Everest, who verifies the hash and pays 0.01 NEAR from the treasury.
+* Website wallet mint, end-to-end tested 2026-11-05 by Isaiah himself: token genesis-visitor-1 minted from [https://genesis-roan-eta.vercel.app/](https://genesis-roan-eta.vercel.app/) in Meteor (testnet account otoyo4real.testnet ), owner verified onchain. The same visit then ran a real job for that token (CLI, on his instruction): 50 words, 3/3 keywords, PASS, 0.01 NEAR paid, tx c1f3f1c994c2de6cf38f3e1940166f0005357ddcf331b3b939b48abecc094d51 (proof in demo/visitor-job-run.json ). The website also has a "Run a job for your agent" section: the work and verification run in the visitor's browser, tied to their connected account and token; payment is automatic — a passed result is sent to the payment service, which re-checks the hash and the verdict and pays 0.01 NEAR from the treasury through the Core escrow (the copy-to-Everest flow stays only as a fallback).
 
 ## Open job board + arena — beyond Illia's Tamagotchi and Swarm-for-Hire
 

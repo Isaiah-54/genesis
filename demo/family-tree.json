@@ -1,6 +1,6 @@
 {
   "treasury": {
-    "balance": 9
+    "balance": 9.2
   },
   "agents": [
     {
@@ -11,13 +11,16 @@
         "speed": 1,
         "quality": 1,
         "costEff": 1,
-        "language": "en"
+        "language": "en",
+        "role": "general"
       },
-      "balance": 1.4,
+      "balance": 1.3,
       "status": "alive",
       "jobsDone": 3,
-      "earned": 2,
-      "consecutiveFails": 1
+      "earned": 1.9,
+      "consecutiveFails": 1,
+      "role": "general",
+      "createdAt": 1793868721528
     },
     {
       "id": "gen-1",
@@ -27,13 +30,16 @@
         "speed": 1,
         "quality": 0.95,
         "costEff": 1.2,
-        "language": "en"
+        "language": "en",
+        "role": "general"
       },
-      "balance": 2.6666666666666665,
+      "balance": 2.5666,
       "status": "alive",
       "jobsDone": 2,
-      "earned": 2,
-      "consecutiveFails": 0
+      "earned": 1.9,
+      "consecutiveFails": 0,
+      "role": "general",
+      "createdAt": 1793868721529
     }
   ],
   "events": [
@@ -46,20 +52,22 @@
         "speed": 1,
         "quality": 0.95,
         "costEff": 1.2,
-        "language": "en"
-      }
+        "language": "en",
+        "role": "general"
+      },
+      "fundedBy": "parent"
     }
   ],
   "log": [
     "BIRTH gen-0 generation 0, balance 1, treasury 9",
-    "JOB job-1 -> PASS (3/3 keywords, 20 words), balance 1.8",
-    "JOB job-2 -> PASS (3/3 keywords, 22 words), balance 2.6",
-    "JOB job-3 -> FAIL (3/3 keywords, 17 words), balance 2.4",
+    "JOB job-1 -> PASS (3/3 keywords, 20 words), balance 1.75",
+    "JOB job-2 -> PASS (3/3 keywords, 22 words), balance 2.5",
+    "JOB job-3 -> FAIL (3/3 keywords, 17 words), balance 2.3",
     "BIRTH gen-1 generation 1",
-    "CHILD gen-1 alive with skill {\"speed\":1,\"quality\":0.95,\"costEff\":1.2,\"language\":\"en\"}, balance 1",
-    "JOB job-1-gen1 -> PASS (3/3 keywords, 20 words), balance 1.8333",
-    "JOB job-2-gen1 -> PASS (3/3 keywords, 22 words), balance 2.6667",
-    "PARENT gen-0 balance after funding child: 1.4000",
-    "TREASURY 9.0000 | AGENTS 2 | EVENTS 1"
+    "CHILD gen-1 alive with skill {\"speed\":1,\"quality\":0.95,\"costEff\":1.2,\"language\":\"en\",\"role\":\"general\"}, balance 1",
+    "JOB job-1-gen1 -> PASS (3/3 keywords, 20 words), balance 1.7833",
+    "JOB job-2-gen1 -> PASS (3/3 keywords, 22 words), balance 2.5666",
+    "PARENT gen-0 balance after funding child: 1.3000",
+    "TREASURY 9.2000 | AGENTS 2 | EVENTS 1"
   ]
 }
