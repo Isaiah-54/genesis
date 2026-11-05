@@ -39,13 +39,20 @@ limits.
 
 ## Prices
 
-The 402 price is the service fee for executing the action; the
-treasury covers the underlying testnet NEAR costs.
+The 402 price is the service fee for executing the action AND the
+funding for the underlying NEAR cost — the caller funds the action,
+not the treasury owner. Mint and breed each cost the treasury 0.6
+NEAR (0.5 birth + 0.1 NFT mint), about $1.50 at NEAR ~$2.50, so their
+near-intents price is 1.50 USDC. Evolve costs only gas and buy costs
+the listing price, so their prices are unchanged. The treasury swaps
+received USDC back into NEAR (see `docs/TREASURY.md` and
+`scripts/treasury-sweep.js`); on testnet the refill comes from the
+free NEAR testnet faucet, because testnet USDC has no swap route.
 
 | Action | Exact rail (testnet USDC) | Near-intents rail (mainnet USDC) |
 |---|---|---|
-| mint | 0.05 | 0.50 |
-| breed | 0.05 | 0.50 |
+| mint | 0.05 | 1.50 |
+| breed | 0.05 | 1.50 |
 | evolve | 0.01 | 0.35 |
 | buy | 0.05 fixed demo, or the listing's NEAR price converted by a 1Click dry quote when it works | 0.50, or the dry-quote conversion when it works |
 
