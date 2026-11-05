@@ -81,6 +81,7 @@ Clean run, all 7 txs Success and re-verified by RPC
 - `genesis-weak-2` → died: owner back to treasury `genesisdemo354551.testnet`, weak2 balance 0.3496 NEAR after returning 0.15 NEAR
 - MCP server: `node src/mcp-server.mjs` — tools for token, balance, pay, mint, create-agent, transfer-NFT, job. Tested over stdio: tools list + balance call return live testnet data.
 - Honest limit: the first run's gen0/gen1/gen5 NFTs are on-chain but locked (their subaccount keys were never saved). They are documented in DESIGN.md, not claimed as working agents. The v2 key-save-first rule prevents this.
+- Website wallet mint, end-to-end tested 2026-11-05 by Isaiah himself: token `genesis-visitor-1` minted from https://genesis-roan-eta.vercel.app/ in Meteor (testnet account `otoyo4real.testnet`), owner verified onchain. The same visit then ran a real job for that token (CLI, on his instruction): 50 words, 3/3 keywords, PASS, 0.01 NEAR paid, tx `c1f3f1c994c2de6cf38f3e1940166f0005357ddcf331b3b939b48abecc094d51` (proof in `demo/visitor-job-run.json`). The website also has a "Run a job for your agent" section: the work and verification run in the visitor's browser, tied to their connected account and token; payment is not automatic there, because the treasury key is never put in a webpage — a passed result (with its sha256 hash) is sent to Everest, who verifies the hash and pays 0.01 NEAR from the treasury.
 
 ## Open job board + arena — beyond Illia's Tamagotchi and Swarm-for-Hire
 Inspired by Illia Polosukhin's AI Tamagotchi (NFT pets with a balance

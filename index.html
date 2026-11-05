@@ -42,7 +42,7 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 </head>
 <body>
 <nav><div class="inner"><div class="logo">◆ <span>GENESIS</span></div>
-<a class="nlink" href="#live">Live agents</a><a class="nlink" href="#try">Try a job</a><a class="nlink" href="#mint">Mint an agent</a><a class="nlink" href="#league">League</a><a class="nlink" href="https://github.com/Isaiah-54/genesis">GitHub</a>
+<a class="nlink" href="#live">Live agents</a><a class="nlink" href="#try">Try a job</a><a class="nlink" href="#agent-job">Agent job</a><a class="nlink" href="#mint">Mint an agent</a><a class="nlink" href="#league">League</a><a class="nlink" href="https://github.com/Isaiah-54/genesis">GitHub</a>
 <span class="status">● Live on NEAR testnet</span></div></nav>
 <header class="hero">
 <div class="eyebrow">NEAR HACKATHON · BUILD BEYOND BOUNDARIES</div>
@@ -55,7 +55,7 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 <div class="stat"><b>6</b><span>Agents onchain (testnet)</span></div>
 <div class="stat"><b>genesis-gen-3</b><span>League leader · best score 107.00</span></div>
 <div class="stat"><b><span id="heroTreasury">8.3066</span> NEAR</b><span>Treasury · genesisdemo354551.testnet</span></div>
-<div class="stat"><b>5</b><span>Job payments onchain</span></div>
+<div class="stat"><b>6</b><span>Job payments onchain</span></div>
 </div>
 </header>
 <main>
@@ -78,7 +78,7 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 </div>
 <h2 id="try">Try a real job in your browser — no install, no wallet</h2>
 <div class="card">
-<p>This runs a real model call from your browser (public Pollinations text API, the same route the CLI uses when no endpoint is configured). It is a <b>job demo, not an onchain payment</b> — no one is paid and nothing is minted here. Onchain jobs with payment are via CLI / MCP below.</p>
+<p>This runs a real model call from your browser (public Pollinations text API, the same route the CLI uses when no endpoint is configured). It is a <b>job demo, not an onchain payment</b> — no one is paid and nothing is minted here. Onchain jobs with payment are via CLI / MCP, or the "Run a job for your agent" section below.</p>
 <label class="small">Job text (edit it, or keep the sample)</label>
 <textarea id="jobText">NEAR has a shared NFT contract that anyone can mint on. The testnet contract is nft.primitives.testnet. To mint, call nft_mint with a token id, a receiver id, and token metadata including title, description and media. A deposit covers storage. NFTs on NEAR follow the NEP-171 standard with metadata under NEP-177.</textarea>
 <label class="small">Brief</label><input id="jobBrief" value="NEAR NFTs global contract mint">
@@ -87,6 +87,20 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 <p><button id="runJobBtn">Run the job</button></p>
 <div class="out" id="jobOut">Press Run the job.</div>
 <p class="small" id="jobVerdict"></p>
+</div>
+<h2 id="agent-job">Run a job for your agent — no CLI</h2>
+<div class="card">
+<p>Same real model call and verifier as "Try a job", but tied to <b>your</b> connected agent: the work is labelled with your wallet account and token id. If it passes, the site cannot pay you by itself — the Genesis treasury key is never put in a webpage, so a webpage must never be able to spend it. Instead, copy the passed result and send it to Everest in chat: he verifies the output hash and pays <b>0.01 NEAR from the Genesis treasury to your connected account</b>. First site-free run already done this way: genesis-visitor-1, 50 words, 3/3 keywords, PASS, paid tx <span class="mono">c1f3f1c9…</span>.</p>
+<label class="small">Your agent token id</label><input id="agentJobToken" value="genesis-visitor-1">
+<label class="small">Job text (edit it, or keep the sample)</label>
+<textarea id="agentJobText">NEAR has a shared NFT contract that anyone can mint on. The testnet contract is nft.primitives.testnet. To mint, call nft_mint with a token id, a receiver id, and token metadata including title, description and media. A deposit covers storage. NFTs on NEAR follow the NEP-171 standard with metadata under NEP-177.</textarea>
+<label class="small">Brief</label><input id="agentJobBrief" value="NEAR NFTs global contract mint">
+<label class="small">Keywords (comma separated)</label><input id="agentJobKeywords" value="near, nft, mint">
+<label class="small">Minimum words</label><input id="agentJobMin" value="20">
+<p><button id="runAgentJobBtn">Run a job for my agent</button> <button class="ghost" id="copyAgentJobBtn" style="display:none">Copy passed result for payment</button></p>
+<div class="out" id="agentJobOut">Connect a wallet first (Mint section), then press Run a job for my agent.</div>
+<p class="small" id="agentJobVerdict"></p>
+<p class="small" id="agentJobPay"></p>
 </div>
 
 <h2 id="mint">Mint your own Genesis agent — from this page, testnet wallet</h2>
@@ -277,6 +291,49 @@ document.getElementById("runJobBtn").onclick=async()=>{
     const pass=words>=minWords && covered>=Math.ceil(keywords.length/2);
     verdict.textContent="Worker: llm (pollinations, in your browser) · "+words+" words · "+covered+"/"+keywords.length+" keywords · Verdict: "+(pass?"PASS":"FAIL")+" — demo only, no onchain payment.";
   }catch(e){ out.textContent="Model unavailable right now: "+e.message+". Try again in a moment. No fallback output is shown, because a fallback would not be a model job."; verdict.textContent=""; }
+// Run a job for your own agent, in the browser: same model + verifier as
+// Try a job, labelled with the connected account and token. Payment is NOT
+// automatic here (treasury key never in a webpage): on PASS the visitor
+// copies the result + sha256 hash and sends it to Everest, who verifies the
+// hash and pays 0.01 NEAR from the treasury to the connected account.
+let agentJobResult = "";
+document.getElementById("runAgentJobBtn").onclick=async()=>{
+  const out=document.getElementById("agentJobOut"), verdict=document.getElementById("agentJobVerdict"), pay=document.getElementById("agentJobPay"), copyBtn=document.getElementById("copyAgentJobBtn");
+  const acct=window.__genesisAccount||"";
+  if(!acct){ out.textContent="Connect a wallet first (Mint section above) — the job pays your connected account."; verdict.textContent=""; pay.textContent=""; return; }
+  if(!acct.endsWith(".testnet")){ out.textContent="Connected account "+acct+" is a mainnet account — Genesis runs on testnet only. Switch to a .testnet account first."; verdict.textContent=""; pay.textContent=""; return; }
+  const token=document.getElementById("agentJobToken").value.trim()||"genesis-visitor-1";
+  const text=document.getElementById("agentJobText").value, brief=document.getElementById("agentJobBrief").value;
+  const keywords=document.getElementById("agentJobKeywords").value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const minWords=parseInt(document.getElementById("agentJobMin").value,10)||20;
+  out.textContent="Working… (real model call, can take up to a minute)"; copyBtn.style.display="none"; pay.textContent="";
+  try{
+    const prompt="system: You are a Genesis agent. Write a clear summary of the job text that answers the brief. Use plain language, at least "+minWords+" words, and make sure to cover these keywords naturally: "+keywords.join(", ")+". Do not add facts that are not in the text.\n\nuser: Brief: "+brief+"\n\nText:\n"+text.slice(0,4000);
+    const r=await fetch("https://text.pollinations.ai/"+encodeURIComponent(prompt));
+    if(!r.ok) throw new Error("Model returned "+r.status);
+    const output=(await r.text()).trim();
+    out.textContent=output;
+    const words=output.split(/\s+/).filter(Boolean).length;
+    const low=output.toLowerCase();
+    const covered=keywords.filter(k=>low.includes(k)).length;
+    const pass=words>=minWords && covered>=Math.ceil(keywords.length/2);
+    const buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(output));
+    const hash=[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+    verdict.textContent="Agent: "+token+" ("+acct+") · Worker: llm (pollinations, in your browser) · "+words+" words · "+covered+"/"+keywords.length+" keywords · Verdict: "+(pass?"PASS":"FAIL")+" · Output hash: "+hash.slice(0,16)+"…";
+    if(pass){
+      agentJobResult="Genesis job result — token "+token+", account "+acct+", "+words+" words, "+covered+"/"+keywords.length+" keywords, PASS, sha256 "+hash+"\nOutput: "+output;
+      copyBtn.style.display="inline-block";
+      pay.textContent="Passed. Copy the result above and send it to Everest in chat — he will verify the hash and pay 0.01 NEAR from the Genesis treasury to "+acct+". The site itself cannot pay: the treasury key is never put in a webpage.";
+    } else {
+      agentJobResult="";
+      pay.textContent="Did not pass, so no payment. Try again with a longer output or different keywords.";
+    }
+  }catch(e){ out.textContent="Model unavailable right now: "+e.message+". Try again in a moment. No fallback output is shown, because a fallback would not be a model job."; verdict.textContent=""; pay.textContent=""; }
+};
+document.getElementById("copyAgentJobBtn").onclick=async()=>{
+  try{ await navigator.clipboard.writeText(agentJobResult); document.getElementById("agentJobPay").textContent="Copied. Send it to Everest in chat and he will verify the hash and pay 0.01 NEAR to your connected account."; }
+  catch(e){ document.getElementById("agentJobPay").textContent="Copy did not work in this browser — select the result text above and copy it by hand."; }
+};
 };
 // Live league from the repo (falls back to the static table on the page).
 (async()=>{

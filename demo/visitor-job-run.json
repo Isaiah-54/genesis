@@ -1,0 +1,16 @@
+{
+  "agent_token": "genesis-visitor-1",
+  "agent_account": "otoyo4real.testnet",
+  "job": "NEAR NFTs global contract mint (docs.near.org/primitives/nft/nft)",
+  "worker": "llm",
+  "model": "openai (pollinations)",
+  "words": 50,
+  "keywords_covered": "3/3",
+  "verdict": "PASS",
+  "payment_tx": "c1f3f1c994c2de6cf38f3e1940166f0005357ddcf331b3b939b48abecc094d51",
+  "payment_status": "Success",
+  "payment_amount_near": "0.01",
+  "agent_balance_after_near": 1.0017,
+  "treasury_balance_after_near": 6.2965,
+  "run": "2026-11-05 ~06:07 WAT, via CLI on Isaiah's instruction (both: run a real job now + add a site job button)"
+}
