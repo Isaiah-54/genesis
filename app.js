@@ -1,18 +1,18 @@
 /**
  * Genesis frontend — real wallet connect + nft_mint on testnet
- * Uses @hot-labs/near-connect (Meteor, MyNearWallet, HOT, and others)
+ * Uses @fastnear/wallet (Meteor, MyNearWallet, HOT, etc.) via CDN UMD build.
  */
 (function () {
   const NFT_CONTRACT = 'nft.primitives.testnet';
   const NETWORK = 'testnet';
-  const MINT_DEPOSIT = '100000000000000000000000'; // 0.1 NEAR in yocto
+  const MINT_DEPOSIT = '100000000000000000000000'; // 0.1 NEAR
   const GAS = '300000000000000'; // 300 TGas
 
-  let connector = null;
-  let wallet = null;
   let accountId = null;
 
-  function $(id) { return document.getElementById(id); }
+  function $(id) {
+    return document.getElementById(id);
+  }
 
   function setStatus(msg, isError) {
     const el = $('walletStatus');
@@ -22,10 +22,17 @@
     }
   }
 
+  function getNearWallet() {
+    return window.nearWallet || null;
+  }
+
   function updateWalletButtons() {
     document.querySelectorAll('#walletBtn').forEach((btn) => {
       if (accountId) {
-        btn.textContent = accountId.length > 24 ? accountId.slice(0, 10) + '…' + accountId.slice(-6) : accountId;
+        btn.textContent =
+          accountId.length > 24
+            ? accountId.slice(0, 10) + '…' + accountId.slice(-6)
+            : accountId;
         btn.classList.add('btn2');
         btn.dataset.connected = '1';
       } else {
@@ -36,83 +43,77 @@
     });
     const mintForm = $('mintForm');
     if (mintForm) mintForm.style.display = accountId ? 'block' : 'none';
-    if (accountId) setStatus('Connected as ' + accountId + ' on testnet. Ready to mint.');
-    else setStatus('Use Connect wallet in the top bar. Meteor and MyNearWallet are supported.');
+    if (accountId) {
+      setStatus('Connected as ' + accountId + ' on testnet. Ready to mint.');
+    } else {
+      setStatus('Use Connect wallet in the top bar. Meteor and MyNearWallet are supported.');
+    }
   }
 
-  async function ensureConnector() {
-    if (connector) return connector;
-    if (typeof NearConnector === 'undefined' && typeof window.NearConnector === 'undefined') {
-      throw new Error('NEAR Connect library not loaded. Check the script tag.');
-    }
-    const NearConnectorCtor = window.NearConnector || NearConnector;
-    connector = new NearConnectorCtor({
-      network: NETWORK,
-      features: {
-        signAndSendTransaction: true,
-        signInWithoutAddKey: true,
-      },
-    });
-    connector.on('wallet:signIn', async (payload) => {
-      try {
-        wallet = payload.wallet || (await connector.wallet());
-        accountId = (payload.accounts && payload.accounts[0] && payload.accounts[0].accountId) || null;
-        if (!accountId && wallet && wallet.getAccounts) {
-          const accounts = await wallet.getAccounts();
-          accountId = accounts[0] && accounts[0].accountId;
+  function waitForWallet(timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function tick() {
+        const w = getNearWallet();
+        if (w && typeof w.connect === 'function') return resolve(w);
+        if (Date.now() - start > (timeoutMs || 8000)) {
+          return reject(new Error('Wallet library not loaded. Hard-refresh the page or open in the system browser.'));
         }
-        updateWalletButtons();
-      } catch (e) {
-        console.error(e);
-        setStatus('Sign-in event error: ' + (e.message || e), true);
-      }
+        setTimeout(tick, 150);
+      })();
     });
-    connector.on('wallet:signOut', () => {
-      wallet = null;
-      accountId = null;
-      updateWalletButtons();
-    });
-    return connector;
   }
 
   async function connectWallet() {
     try {
       setStatus('Opening wallet selector…');
-      const c = await ensureConnector();
+      const nw = await waitForWallet(10000);
+
       if (accountId) {
         try {
-          const w = wallet || (await c.wallet());
-          await c.disconnect(w);
-        } catch (_) {
-          wallet = null;
-          accountId = null;
-        }
+          if (typeof nw.disconnect === 'function') await nw.disconnect();
+        } catch (_) {}
+        accountId = null;
         updateWalletButtons();
         return;
       }
-      const connectedWallet = await c.connect();
-      wallet = connectedWallet;
-      const accounts = await connectedWallet.getAccounts();
-      accountId = accounts[0] && accounts[0].accountId;
+
+      const result = await nw.connect({ network: NETWORK });
+      accountId =
+        (result && result.accountId) ||
+        nw.accountId ||
+        nw.currentAccountId ||
+        null;
+
+      if (!accountId && typeof nw.getAccounts === 'function') {
+        const accounts = await nw.getAccounts();
+        accountId = accounts && accounts[0] && (accounts[0].accountId || accounts[0]);
+      }
+
+      if (!accountId) {
+        setStatus('Connected but no account id returned. Try again.', true);
+        return;
+      }
       updateWalletButtons();
     } catch (e) {
       console.error(e);
-      if (String(e.message || e).toLowerCase().includes('user') || String(e).includes('reject')) {
+      const msg = e && e.message ? e.message : String(e);
+      if (/user|reject|cancel/i.test(msg)) {
         setStatus('Connection cancelled.', true);
       } else {
-        setStatus('Connect failed: ' + (e.message || e), true);
+        setStatus('Connect failed: ' + msg, true);
       }
     }
   }
 
   async function mintAgent() {
     const status = $('mintStatus');
-    const tokenId = ($('mintToken') && $('mintToken').value || '').trim();
-    const title = ($('mintTitle') && $('mintTitle').value || 'Genesis Agent').trim();
+    const tokenId = (($('mintToken') && $('mintToken').value) || '').trim();
+    const title = (($('mintTitle') && $('mintTitle').value) || 'Genesis Agent').trim();
     const gen = ($('mintGen') && $('mintGen').value) || '0';
     const parent = ($('mintParent') && $('mintParent').value) || 'treasury';
 
-    if (!accountId || !wallet) {
+    if (!accountId) {
       if (status) status.textContent = 'Connect a wallet first.';
       return;
     }
@@ -121,22 +122,22 @@
       return;
     }
 
-    if (status) status.textContent = 'Approve the mint in your wallet…';
+    if (status) {
+      status.textContent = 'Approve the mint in your wallet…';
+      status.style.color = 'var(--muted)';
+    }
 
     const description =
-      'Genesis agent. Generation ' + gen + '. Parent: ' + parent +
+      'Genesis agent. Generation ' +
+      gen +
+      '. Parent: ' +
+      parent +
       '. Works jobs, gets verified, earns, can reproduce or die.';
-
-    // Each generation mints with its own card image (gen 0-9, gen-x above 9).
-    const genNum = parseInt(gen, 10);
-    const media = (Number.isInteger(genNum) && genNum >= 0 && genNum <= 9)
-      ? 'https://genesis-roan-eta.vercel.app/nft/gen-' + genNum + '.svg'
-      : 'https://genesis-roan-eta.vercel.app/nft/gen-x.svg';
 
     const tokenMetadata = {
       title: title,
       description: description,
-      media: media,
+      media: 'https://raw.githubusercontent.com/Isaiah-54/genesis/main/favicon.svg',
       copies: 1,
       extra: JSON.stringify({
         generation: Number(gen) || 0,
@@ -147,22 +148,20 @@
     };
 
     try {
-      const w = wallet || (await connector.wallet());
-      const result = await w.signAndSendTransaction({
+      const nw = await waitForWallet(5000);
+      const result = await nw.sendTransaction({
         receiverId: NFT_CONTRACT,
         actions: [
           {
             type: 'FunctionCall',
-            params: {
-              methodName: 'nft_mint',
-              args: {
-                token_id: tokenId,
-                receiver_id: accountId,
-                token_metadata: tokenMetadata,
-              },
-              gas: GAS,
-              deposit: MINT_DEPOSIT,
+            methodName: 'nft_mint',
+            args: {
+              token_id: tokenId,
+              receiver_id: accountId,
+              token_metadata: tokenMetadata,
             },
+            gas: GAS,
+            deposit: MINT_DEPOSIT,
           },
         ],
       });
@@ -171,26 +170,32 @@
         (result && result.transaction && result.transaction.hash) ||
         (result && result.transaction_outcome && result.transaction_outcome.id) ||
         (result && result.txHash) ||
+        (result && result.hash) ||
         '';
 
       if (status) {
         status.innerHTML =
           'Mint submitted' +
           (hash
-            ? '. Tx: <a href="https://testnet.nearblocks.io/txns/' + hash + '" target="_blank" rel="noopener">' +
-              hash.slice(0, 12) + '…</a>'
+            ? '. Tx: <a href="https://testnet.nearblocks.io/txns/' +
+              hash +
+              '" target="_blank" rel="noopener">' +
+              hash.slice(0, 12) +
+              '…</a>'
             : '. Check your wallet activity.') +
-          ' Token <span class="mono">' + tokenId + '</span> → ' + accountId;
+          ' Token <span class="mono">' +
+          tokenId +
+          '</span> → ' +
+          accountId;
         status.style.color = 'var(--green)';
       }
     } catch (e) {
       console.error(e);
-      const msg = e.message || String(e);
+      const msg = e && e.message ? e.message : String(e);
       if (status) {
-        status.textContent =
-          msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel')
-            ? 'Mint cancelled in wallet.'
-            : 'Mint failed: ' + msg;
+        status.textContent = /reject|cancel/i.test(msg)
+          ? 'Mint cancelled in wallet.'
+          : 'Mint failed: ' + msg;
         status.style.color = 'var(--red)';
       }
     }
@@ -199,7 +204,6 @@
   async function runBrowserJob(text, brief, keywords, minWords) {
     const kw = keywords.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
     let output = '';
-    let worker = 'extractive-fallback';
     try {
       const prompt =
         'Summarise the following for a brief about "' +
@@ -209,11 +213,11 @@
         '. Text:\n\n' +
         text.slice(0, 2500);
       const r = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt));
-      if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; }
+      if (r.ok) output = await r.text();
     } catch (_) {}
     if (!output || output.length < 40) {
       const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-      const briefWords = new Set((brief.toLowerCase().match(/[a-z]+/g) || []));
+      const briefWords = new Set(brief.toLowerCase().match(/[a-z]+/g) || []);
       const scored = sentences
         .map((s) => ({
           s,
@@ -227,65 +231,7 @@
     const words = (output.toLowerCase().match(/[a-z]+/g) || []).length;
     const covered = kw.filter((k) => output.toLowerCase().includes(k)).length;
     const pass = words >= (minWords || 20) && covered >= Math.ceil(Math.max(kw.length, 1) * 0.5);
-    return { output, words, covered, total: kw.length, pass, worker };
-  }
-
-  async function sha256Hex(text) {
-    if (!window.crypto || !window.crypto.subtle) return '(hash unavailable in this browser)';
-    const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  function wireAgentJobButton() {
-    const btn = $('runAgentJobBtn');
-    if (!btn) return;
-    const copyBtn = $('copyAgentJobBtn');
-    btn.addEventListener('click', async () => {
-      const out = $('agentJobOut');
-      const verdict = $('agentJobVerdict');
-      const hashEl = $('agentJobHash');
-      const payEl = $('agentJobPay');
-      if (copyBtn) copyBtn.style.display = 'none';
-      if (hashEl) hashEl.textContent = '';
-      if (payEl) payEl.textContent = '';
-      const tokenId = ($('agentJobToken') && $('agentJobToken').value || '').trim() || 'genesis-visitor-1';
-      if (!accountId) { out.textContent = 'Connect a wallet first (Mint section above).'; return; }
-      if (!accountId.endsWith('.testnet')) {
-        out.textContent = 'This is a MAINNET account (' + accountId + '). Agent jobs pay in testnet NEAR — connect a .testnet account instead.';
-        return;
-      }
-      out.textContent = 'Running… (real model call, can take up to a minute)';
-      const res = await runBrowserJob(
-        $('agentJobText').value,
-        $('agentJobBrief').value,
-        $('agentJobKeywords').value,
-        parseInt($('agentJobMin').value, 10)
-      );
-      out.textContent = res.output;
-      verdict.textContent =
-        'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
-        ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: ' +
-        (res.pass ? 'PASS' : 'FAIL');
-      verdict.style.color = res.pass ? 'var(--green)' : 'var(--red)';
-      const hash = await sha256Hex(res.output);
-      if (hashEl) hashEl.textContent = 'Full output sha256: ' + hash;
-      if (!res.pass) {
-        if (payEl) payEl.textContent = 'No payment — job failed verification.';
-        return;
-      }
-      const payload =
-        'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
-        ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: PASS' +
-        ' · Output hash: ' + hash + ' · Output: ' + res.output;
-      if (payEl) payEl.textContent = 'Passed. Payment is not automatic here — copy the result below and send it to Everest in chat; he verifies the hash and pays 0.01 NEAR from the treasury to ' + accountId + '.';
-      if (copyBtn) {
-        copyBtn.style.display = '';
-        copyBtn.onclick = async () => {
-          try { await navigator.clipboard.writeText(payload); copyBtn.textContent = 'Copied — send it to Everest'; }
-          catch (_) { copyBtn.textContent = 'Copy failed — select the text above'; }
-        };
-      }
-    });
+    return { output, words, covered, total: kw.length, pass };
   }
 
   function wireJobButton() {
@@ -325,28 +271,28 @@
 
   wireWalletButtons();
   wireJobButton();
-  wireAgentJobButton();
   updateWalletButtons();
 
   window.addEventListener('load', async () => {
     try {
-      await ensureConnector();
-      if (connector.wallet) {
+      const nw = await waitForWallet(10000);
+      if (typeof nw.restore === 'function') {
         try {
-          const w = await connector.wallet();
-          if (w) {
-            wallet = w;
-            const accounts = await w.getAccounts();
-            if (accounts && accounts[0]) {
-              accountId = accounts[0].accountId;
-              updateWalletButtons();
-            }
-          }
+          const restored = await nw.restore({ network: NETWORK });
+          if (restored && restored.accountId) accountId = restored.accountId;
         } catch (_) {}
       }
+      if (!accountId) {
+        accountId = nw.accountId || nw.currentAccountId || null;
+      }
+      if (accountId) updateWalletButtons();
+      else setStatus('Wallet ready. Tap Connect wallet (Meteor / MyNearWallet supported).');
     } catch (e) {
-      console.warn('NEAR Connect init:', e);
-      setStatus('Wallet library loading… If this persists, hard-refresh the page.', true);
+      console.warn(e);
+      setStatus(
+        'Wallet library slow to load in this browser. Hard-refresh, or open the site in Chrome/Safari and connect from there.',
+        true
+      );
     }
   });
 })();
