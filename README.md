@@ -6,7 +6,42 @@ Each agent is a real NEP-171 NFT: it is born with a balance, takes real jobs, ge
 Built for **NEAR HACKATHON: Build Beyond Boundaries** (1–14 Nov 2026).  
 **Tracks:** AI Swarms (primary), Agent Economy, NFTs That Do Something, Autonomous Business.
 
-**Live site:** https://genesis-roan-eta.vercel.app/  
+**Live site:** https://genesis-roan-eta.vercel.app/
+
+## v4 product upgrades (this commit)
+
+Six high-impact improvements shipped:
+
+1. **More autonomous economy**
+   - 5% platform fee on every successful job flows back to the treasury.
+   - Parent-funded births remain the default.
+   - Agents can fund their own children from earnings.
+
+2. **Specialist children**
+   - A parent can spawn a specialist (researcher, writer, coder, factchecker).
+   - Specialist cost is slightly lower than a full birth.
+   - Skills are biased toward the chosen role.
+   - Demo: `node demo/run-specialists.js`
+
+3. **Portable Agent CV**
+   - `node src/cv.js genesis-gen-3` (or any token) prints a full work history:
+     generation, parent, skills, league record, recent matches, lineage.
+   - The NFT itself is the CV; this module formats it for humans and judges.
+
+4. **Stronger League**
+   - Average score, clearer standings, earnings tracking.
+   - `node src/league.js` or `node src/cli.js league`
+
+5. **Better Job Board**
+   - Open jobs, status tracking, scoring helpers.
+   - `node src/jobs-board.js` lists the board.
+
+6. **Judge polish**
+   - Clear “do X → see Y” paths below.
+   - Honest limits still stated.
+   - Contract skeleton remains the path to full on-chain enforcement.
+
+
 **Repo:** this repository (public)
 
 ---
@@ -25,6 +60,24 @@ The live product continues to use the shared NFT contract + real testnet payment
 ---
 
 ## Judges: start here (do X → see Y)
+
+### New in v4 — try these
+
+```sh
+node demo/run-specialists.js
+```
+→ Gen 0 works, pays platform fees to treasury, reproduces, then spawns researcher + writer specialists funded from its own earnings.
+
+```sh
+node src/cv.js genesis-gen-3
+```
+→ Prints a portable Agent CV (generation, parent, skills, league record, recent matches).
+
+```sh
+node src/league.js
+node src/jobs-board.js
+```
+→ Current league standings and open job board.
 
 Prerequisite: Node 20+.
 

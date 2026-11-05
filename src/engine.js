@@ -1,68 +1,100 @@
-// Genesis engine v3 — stronger working product for NEAR HACKATHON
-// Parent-funded births, clear death rules, deterministic mutation.
-// Balances in the pure JS demos are ledger units.
+// Genesis engine v4 — autonomous agent economy
+// Parent-funded births, specialist spawn, fee tracking, clear death rules.
+// Balances in pure JS demos are ledger units.
 // On testnet the CLI/MCP layer mirrors births, payments and deaths with real NEAR.
 
-const BIRTH_COST = 1.0;          // ledger units (maps to ~0.5 NEAR on testnet)
+const BIRTH_COST = 1.0;
 const PROFIT_THRESHOLD = 0.5;
-const INFERENCE_COST = 0.20;     // base cost per job, scaled by cost-efficiency skill
+const INFERENCE_COST = 0.20;
 const MAX_CONSECUTIVE_FAILS = 3;
 const MIN_JOBS_TO_REPRODUCE = 3;
+const SPECIALIST_COST = 0.8;   // slightly cheaper than full birth
+const PLATFORM_FEE_RATE = 0.05; // 5% of job rewards go back to treasury
 
 let nextId = 0;
 
-function skillFor(parent) {
+const SPECIALIST_TYPES = {
+  researcher: { quality: 0.3, speed: -0.05, costEff: 0 },
+  writer:     { quality: 0.2, speed: 0.1,  costEff: -0.05 },
+  coder:      { quality: 0.15, speed: 0.05, costEff: 0.15 },
+  factchecker:{ quality: 0.25, speed: -0.1, costEff: 0.1 },
+};
+
+function skillFor(parent, specialistType) {
   if (!parent) {
-    return { speed: 1.0, quality: 1.0, costEff: 1.0, language: 'en' };
+    return { speed: 1.0, quality: 1.0, costEff: 1.0, language: 'en', role: 'general' };
   }
-  // Deterministic mutation: one trait improves, one may regress slightly.
-  const roll = nextId % 3;
   const s = { ...parent.skill };
+  if (specialistType && SPECIALIST_TYPES[specialistType]) {
+    const delta = SPECIALIST_TYPES[specialistType];
+    s.speed   = Math.max(0.5, +(s.speed + (delta.speed || 0)).toFixed(2));
+    s.quality = Math.max(0.5, +(s.quality + (delta.quality || 0)).toFixed(2));
+    s.costEff = Math.max(0.5, +(s.costEff + (delta.costEff || 0)).toFixed(2));
+    s.role = specialistType;
+    return s;
+  }
+  // Default mutation
+  const roll = nextId % 3;
   if (roll === 0) { s.speed = +(s.speed + 0.2).toFixed(2); s.costEff = Math.max(0.5, +(s.costEff - 0.05).toFixed(2)); }
   if (roll === 1) { s.quality = +(s.quality + 0.2).toFixed(2); s.speed = Math.max(0.5, +(s.speed - 0.05).toFixed(2)); }
   if (roll === 2) { s.costEff = +(s.costEff + 0.2).toFixed(2); s.quality = Math.max(0.5, +(s.quality - 0.05).toFixed(2)); }
+  s.role = s.role || 'general';
   return s;
 }
 
-/**
- * Create a new agent.
- * - Gen 0 is funded by the treasury.
- * - Later generations are funded by the parent (parent-funded birth).
- * This is the key economic rule that makes the swarm self-sustaining.
- */
-function makeAgent(parent, treasury) {
-  const id = `gen-${nextId++}`;
+function makeAgent(parent, treasury, options = {}) {
+  const id = options.id || `gen-${nextId++}`;
   const generation = parent ? parent.generation + 1 : 0;
+  const cost = options.specialist ? SPECIALIST_COST : BIRTH_COST;
   const agent = {
     id,
     generation,
     parent: parent ? parent.id : null,
-    skill: skillFor(parent),
-    balance: BIRTH_COST,
+    skill: skillFor(parent, options.specialist),
+    balance: cost,
     status: 'alive',
     jobsDone: 0,
     earned: 0,
     consecutiveFails: 0,
+    role: options.specialist || 'general',
     createdAt: Date.now(),
   };
 
   if (parent) {
-    // Parent-funded birth — the core improvement
-    if (parent.balance < BIRTH_COST) {
-      throw new Error(`Parent ${parent.id} has insufficient balance (${parent.balance}) to fund birth`);
+    if (parent.balance < cost) {
+      throw new Error(`Parent ${parent.id} has insufficient balance (${parent.balance}) to fund ${options.specialist || 'birth'}`);
     }
-    parent.balance = +(parent.balance - BIRTH_COST).toFixed(4);
+    parent.balance = +(parent.balance - cost).toFixed(4);
   } else {
-    // Gen 0 funded by treasury
-    if (treasury.balance < BIRTH_COST) {
+    if (treasury.balance < cost) {
       throw new Error('Treasury has insufficient balance for Gen 0 birth');
     }
-    treasury.balance = +(treasury.balance - BIRTH_COST).toFixed(4);
+    treasury.balance = +(treasury.balance - cost).toFixed(4);
   }
   return agent;
 }
 
-// Extractive summary used by pure JS demos (never claimed as LLM).
+/** Spawn a specialist child funded by the parent. */
+function spawnSpecialist(parent, treasury, specialistType) {
+  if (!SPECIALIST_TYPES[specialistType]) {
+    throw new Error(`Unknown specialist type: ${specialistType}. Use: ${Object.keys(SPECIALIST_TYPES).join(', ')}`);
+  }
+  if (parent.status !== 'alive') throw new Error('Parent is not alive');
+  if (parent.balance < SPECIALIST_COST) {
+    throw new Error(`Parent needs at least ${SPECIALIST_COST} to spawn a specialist`);
+  }
+  const child = makeAgent(parent, treasury, { specialist: specialistType });
+  return {
+    event: 'specialist_birth',
+    parent: parent.id,
+    child: child.id,
+    specialist: specialistType,
+    childSkill: child.skill,
+    childObj: child,
+    fundedBy: 'parent',
+  };
+}
+
 function work(job, agent) {
   const sentences = (job.text || '').split(/(?<=[.!?])\s+/).filter(Boolean);
   const briefWords = new Set((job.brief || '').toLowerCase().match(/[a-z]+/g) || []);
@@ -97,10 +129,17 @@ function doJob(agent, job, treasury) {
   const v = verify(job, output);
   agent.jobsDone += 1;
 
+  let fee = 0;
+  let netReward = 0;
   if (v.pass) {
-    agent.balance = +(agent.balance + (job.reward || 0)).toFixed(4);
-    agent.earned = +(agent.earned + (job.reward || 0)).toFixed(4);
+    const reward = job.reward || 0;
+    fee = +(reward * PLATFORM_FEE_RATE).toFixed(4);
+    netReward = +(reward - fee).toFixed(4);
+    agent.balance = +(agent.balance + netReward).toFixed(4);
+    agent.earned = +(agent.earned + netReward).toFixed(4);
     agent.consecutiveFails = 0;
+    // Fee flows back to treasury — makes the system more self-sustaining
+    treasury.balance = +(treasury.balance + fee).toFixed(4);
   } else {
     agent.consecutiveFails += 1;
   }
@@ -112,21 +151,15 @@ function doJob(agent, job, treasury) {
     verification: v,
     balance: agent.balance,
     cost,
+    fee,
+    netReward,
     consecutiveFails: agent.consecutiveFails,
   };
 }
 
-/**
- * Lifecycle check after every job (or on demand).
- * - Death: balance <= 0 OR consecutiveFails >= MAX_CONSECUTIVE_FAILS
- *   Remaining balance returns to treasury.
- * - Reproduction: jobsDone >= MIN_JOBS_TO_REPRODUCE AND balance >= BIRTH_COST + PROFIT_THRESHOLD
- *   Child is funded by the parent (parent-funded birth).
- */
 function lifecycle(agent, treasury) {
   if (agent.status !== 'alive') return null;
 
-  // Death check
   if (agent.balance <= 0 || agent.consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
     agent.status = 'dead';
     const returned = Math.max(0, agent.balance);
@@ -141,7 +174,6 @@ function lifecycle(agent, treasury) {
     };
   }
 
-  // Reproduction check (parent-funded)
   if (agent.jobsDone >= MIN_JOBS_TO_REPRODUCE && agent.balance >= BIRTH_COST + PROFIT_THRESHOLD) {
     try {
       const child = makeAgent(agent, treasury);
@@ -155,7 +187,6 @@ function lifecycle(agent, treasury) {
         fundedBy: 'parent',
       };
     } catch (e) {
-      // Parent no longer has enough after costs — no birth
       return null;
     }
   }
@@ -168,7 +199,11 @@ module.exports = {
   INFERENCE_COST,
   MAX_CONSECUTIVE_FAILS,
   MIN_JOBS_TO_REPRODUCE,
+  SPECIALIST_COST,
+  PLATFORM_FEE_RATE,
+  SPECIALIST_TYPES,
   makeAgent,
+  spawnSpecialist,
   doJob,
   lifecycle,
   work,
