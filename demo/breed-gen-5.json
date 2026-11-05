@@ -1,0 +1,22 @@
+{
+  "action": "breed",
+  "child": "genesis-gen-5",
+  "parents": [
+    "genesis-gen-2",
+    "genesis-gen-3"
+  ],
+  "generation": 5,
+  "skills": {
+    "speed": 1.095,
+    "quality": 1.1899999,
+    "cost_eff": 0.97499996
+  },
+  "owner": "genesisdemo354551.testnet",
+  "breedTx": "e0bf1dde80531d8a5eda565eaf0aed38243e35248339bc57ce1fb278723fc545",
+  "mintTx": "ed9aab97bdd24941d1eedcc6cfed48346b36e954cdaca0ced69ea924df2395fa",
+  "costNear": "0.6 (0.5 birth + 0.1 mint)",
+  "treasuryAfterNear": 8.692128050164925,
+  "verifiedOnchain": "2026-11-05 ~20:28 WAT",
+  "note": "First real Genesis breed. Child gen = max(parent gens)+1 = 5. Skills are the parents average plus the onchain mutation (quality +0.14, speed +0.075, cost_eff -0.045, within the documented [-0.05,+0.14] range). Registry count is 6: gen-2, gen-3, visitor-1, visitor-4, visitor-9, gen-5. visitor-9 is a split-brain (registered in the Core, no NFT) left over from the dedup replay test; completable for 0.1 NEAR, not minted.",
+  "registryCountAfter": 6
+}
