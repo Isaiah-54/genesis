@@ -11,6 +11,7 @@ and dies, its balance returning to the treasury.
 Testnet proof: gen0.genesisdemo354551.testnet born on NEAR testnet,
 funded 0.1 NEAR, tx Cb1RNmo7uEpYnYE42JfW5V95d2uRkGMry75mz4yf8J57.
 
-Repo: [PASTE PUBLIC REPO LINK HERE]
+Repo: https://github.com/Isaiah-54/genesis
+Try it: https://genesis-roan-eta.vercel.app/
 
 @NEARProtocol #NEARHackathon
