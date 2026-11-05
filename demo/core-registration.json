@@ -1,0 +1,10 @@
+{
+  "core_contract": "core.genesisdemo354551.testnet",
+  "date": "2026-11-05",
+  "note": "Existing NFT agents registered in the Genesis Core onchain registry on Isaiah's yes. Each birth() attaches the 0.5 NEAR birth cost from the treasury; skills default to 1.0/1.0/1.0 (onchain NFT records do not carry skills).",
+  "registrations": [
+    { "token_id": "genesis-gen-2", "owner_id": "gen2.genesisdemo354551.testnet", "generation": 2, "parent": "genesis-gen-1", "birth_tx": "f6cf161af77c77a80007746f349b155825ae1331e18829e74436e28d038fc674", "status": "Success", "verified": "get_agent returns Alive, gen 2, parent genesis-gen-1" },
+    { "token_id": "genesis-gen-3", "owner_id": "gen3.genesisdemo354551.testnet", "generation": 3, "parent": "genesis-gen-2", "birth_tx": "b933f5990e671c4c82503bb69eaa5677067d820e70693866b8a7ed05123eedef", "status": "Success", "verified": "get_agent returns Alive, gen 3, parent genesis-gen-2" },
+    { "token_id": "genesis-visitor-1", "owner_id": "otoyo4real.testnet", "generation": 0, "parent": "treasury", "birth_tx": "920ff3a7967172a6c9007dcef390e1fc4809c8f94b19c17d4804fabb4632483a", "status": "Success", "verified": "get_agent returns Alive, gen 0, parent treasury (check below)" }
+  ]
+}
