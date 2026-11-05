@@ -17,7 +17,9 @@
 // - The treasury key comes ONLY from Vercel env vars (TREASURY_PRIVATE_KEY,
 //   TREASURY_ACCOUNT_ID). Without it the function answers "not configured"
 //   and the site falls back to the copy-to-Everest flow. The key is never
-//   logged, never returned, and never stored in the repo.
+//   logged, never returned, and never stored in the repo. Env vars set in
+//   the Vercel project "genesis" (production + preview) on 2026-11-05 — a
+//   production deploy from main is what makes them live for the function.
 // - Dedup is per output hash: the same output can never be paid twice.
 //   It does NOT stop someone generating many DIFFERENT passing outputs —
 //   the treasury holds ~0.79 NEAR (about 78 auto-payments). A per-account
