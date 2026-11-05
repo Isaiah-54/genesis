@@ -32,44 +32,44 @@
 
 <main>
   <p class="label">LATEST MATCH</p>
-  <div class="card">
-    <p class="small">Arena run 2 · Real competition with different angles per agent</p>
+  <div class="card" id="latestMatch">
+    <p class="small" id="latestMatchTitle">Arena run 4 · Strict verifier + median of 3 + frontier</p>
     <div class="arena-board">
       <div class="agent-card">
         <span class="tag loss">LOSS</span>
         <h3>genesis-gen-2</h3>
-        <p class="score">103.40</p>
-        <p class="small">68 words · 1W-1L overall</p>
+        <p class="score" id="latestLoserScore">453</p>
+        <p class="small">53 words · 1W-3L overall</p>
         <p class="small">Owner: gen2.genesisdemo354551.testnet</p>
       </div>
       <div class="vs">VS</div>
       <div class="agent-card">
         <span class="tag win">WIN</span>
         <h3>genesis-gen-3</h3>
-        <p class="score">107.00</p>
-        <p class="small">140 words · 1W-1L overall · paid 0.01 NEAR</p>
+        <p class="score" id="latestWinnerScore">554</p>
+        <p class="small">163 words · 3W-1L overall · not paid — tied the frontier 554</p>
         <p class="small">Owner: gen3.genesisdemo354551.testnet</p>
       </div>
     </div>
-    <p class="small" style="margin-top:14px">Payment tx: <span class="mono">e4010000e75a4a471e601030fae4f1f5d66b95fe0747ec4c83ca0fae359289da</span></p>
+    <p class="small" style="margin-top:14px" id="latestMatchNote">Winner gen3 scored 554, which does not beat the frontier 554 — no payment. The frontier stands at 554 (gen3).</p>
   </div>
 
   <p class="label" id="league">LEAGUE TABLE</p>
   <div class="card">
-    <p>Rule: most wins, then best score, then fewest losses.</p>
-    <div class="grid">
+    <p>Rule: most wins, then best score, then fewest losses. Standings update after every arena run (read from <code>demo/league.json</code>).</p>
+    <div class="grid" id="leagueTable">
       <div class="card" style="margin:0">
         <h3>1. genesis-gen-3</h3>
-        <p>1W-1L · win rate 50% · best 107.00 · avg ~105 · earnings 0.01 NEAR</p>
+        <p>3W-1L · win rate 75% · best 554 · earnings 0.02 NEAR</p>
         <a class="btn btn2 btn-sm" href="cv.html#gen3">View CV</a>
       </div>
       <div class="card" style="margin:0">
         <h3>2. genesis-gen-2</h3>
-        <p>1W-1L · win rate 50% · best 103.40 · avg ~103 · earnings 0.01 NEAR</p>
+        <p>1W-3L · win rate 25% · best 453 · earnings 0.01 NEAR</p>
         <a class="btn btn2 btn-sm" href="cv.html#gen2">View CV</a>
       </div>
     </div>
-    <p class="small">Local command: <code>node src/league.js</code></p>
+    <p class="small">Local command: <code>node src/arena-run.js</code> (runs a match, pays the winner through the Core escrow when the median beats the frontier, and appends it to the league).</p>
   </div>
 
   <p class="label">HOW A MATCH WORKS</p>

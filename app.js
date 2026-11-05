@@ -531,6 +531,36 @@
     if (btn) btn.addEventListener('click', postJob);
   }
 
+  // ─── Arena league (arena.html) ───────────────────────────────
+  // The standings and latest match are read from demo/league.json, so
+  // the page stays current after every arena run (the old static table
+  // went stale after run 2). If the fetch fails, the static fallback
+  // text in arena.html stays as-is.
+  async function loadArena() {
+    const table = $('leagueTable');
+    if (!table) return;
+    let league;
+    try {
+      const r = await fetch('demo/league.json');
+      if (!r.ok) return;
+      league = await r.json();
+    } catch (_) { return; }
+    if (!league || !Array.isArray(league.standings) || !league.standings.length) return;
+    table.innerHTML = league.standings.map(function (s, i) {
+      const token = (s.token || s.agent || '').replace(/^genesis-/, '');
+      return '<div class="card" style="margin:0"><h3>' + (i + 1) + '. ' + esc(s.token || s.agent) + '</h3>' +
+        '<p>' + s.wins + 'W-' + s.losses + 'L · win rate ' + esc(s.win_rate || '') + ' · best ' + s.best_score + ' · earnings ' + esc(s.arena_earnings || '') + '</p>' +
+        '<a class="btn btn2 btn-sm" href="cv.html#' + esc(token) + '">View CV</a></div>';
+    }).join('');
+    const last = Array.isArray(league.matches) && league.matches.length ? league.matches[league.matches.length - 1] : null;
+    if (last && last.results && last.results.length >= 2) {
+      const title = $('latestMatchTitle');
+      if (title) title.textContent = 'Arena run ' + league.matches.length + ' · Strict verifier + median of 3 + frontier · ' + (last.date || '');
+      const note = $('latestMatchNote');
+      if (note) note.textContent = last.note || '';
+    }
+  }
+
   // ─── Evolve ────────────────────────────────────────────────────
   // Minting is gen 0 only; an agent evolves one generation after 3 more
   // paid wins since its last evolution, up to the final gen 9. Each
@@ -772,5 +802,6 @@
     }
     try { await suggestFreeTokenId(); } catch (_) {}
     try { await loadJobBoard(); } catch (_) {}
+    try { await loadArena(); } catch (_) {}
   });
 })();

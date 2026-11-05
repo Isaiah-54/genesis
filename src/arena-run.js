@@ -165,6 +165,41 @@ function rpcView(contractId, method, args) {
     results: entries.map(e => ({ agent: e.agent, score: e.medianScore, words: e.words, pass: e.pass })),
     winner,
   });
+  // Recompute the standings from ALL matches (not just this one), so the
+  // table never goes stale: wins/losses are match wins (highest median
+  // score), best score is the highest median, earnings count only paid
+  // matches (payment_tx present, 0.01 NEAR each). Note: league wins are
+  // match wins, not evolution wins — evolution counts only PAID jobs on
+  // the Core, so a match won but not paid (tied frontier) is a league
+  // win but not an evolution win.
+  const byAgent = {};
+  for (const m of league.matches) {
+    const agents = (m.results || []).map(r => r.agent);
+    for (const a of agents) {
+      byAgent[a] = byAgent[a] || { agent: a, wins: 0, losses: 0, played: 0, best_score: 0, paid_wins: 0 };
+      byAgent[a].played += 1;
+      const res = (m.results || []).find(r => r.agent === a);
+      if (res && typeof res.score === 'number') byAgent[a].best_score = Math.max(byAgent[a].best_score, res.score);
+    }
+    if (m.winner && byAgent[m.winner]) {
+      byAgent[m.winner].wins += 1;
+      if (m.payment_tx) byAgent[m.winner].paid_wins += 1;
+      for (const a of agents) if (a !== m.winner && byAgent[a]) byAgent[a].losses += 1;
+    }
+  }
+  const tokenFor = (a) => a.includes('gen2.') ? 'genesis-gen-2' : a.includes('gen3.') ? 'genesis-gen-3' : a;
+  league.standings = Object.values(byAgent)
+    .sort((x, y) => y.wins - x.wins || y.best_score - x.best_score)
+    .map(s => ({
+      agent: s.agent,
+      token: tokenFor(s.agent),
+      wins: s.wins,
+      losses: s.losses,
+      played: s.played,
+      win_rate: s.played ? Math.round(100 * s.wins / s.played) + '%' : '0%',
+      best_score: s.best_score,
+      arena_earnings: (0.01 * s.paid_wins).toFixed(2) + ' NEAR',
+    }));
   fs.writeFileSync(leaguePath, JSON.stringify(league, null, 2));
-  console.log('Appended the match to demo/league.json');
+  console.log('Appended the match to demo/league.json (standings recomputed)');
 })().catch(e => { console.error('ARENA FAILED:', e.message); process.exit(1); });

@@ -58,28 +58,49 @@
         }
       ],
       "winner": "gen3.genesisdemo354551.testnet"
+    },
+    {
+      "date": "2026-11-05",
+      "job": "NEAR NFTs global contract mint",
+      "note": "Strict verifier + median of 3 + frontier. Winner gen3.genesisdemo354551.testnet scored 554, which does not beat the frontier 554 — no payment. The frontier stands.",
+      "payment_tx": null,
+      "results": [
+        {
+          "agent": "gen2.genesisdemo354551.testnet",
+          "score": 453,
+          "words": 53,
+          "pass": true
+        },
+        {
+          "agent": "gen3.genesisdemo354551.testnet",
+          "score": 554,
+          "words": 163,
+          "pass": true
+        }
+      ],
+      "winner": "gen3.genesisdemo354551.testnet"
     }
   ],
   "standings": [
     {
       "agent": "gen3.genesisdemo354551.testnet",
-      "arena_earnings": "0.01 NEAR",
-      "best_score": 107,
-      "losses": 1,
-      "played": 2,
       "token": "genesis-gen-3",
-      "win_rate": "50%",
-      "wins": 1
+      "wins": 3,
+      "losses": 1,
+      "played": 4,
+      "win_rate": "75%",
+      "best_score": 554,
+      "arena_earnings": "0.02 NEAR"
     },
     {
       "agent": "gen2.genesisdemo354551.testnet",
-      "arena_earnings": "0.01 NEAR",
-      "best_score": 103.4,
-      "losses": 1,
-      "played": 2,
       "token": "genesis-gen-2",
-      "win_rate": "50%",
-      "wins": 1
+      "wins": 1,
+      "losses": 3,
+      "played": 4,
+      "win_rate": "25%",
+      "best_score": 453,
+      "arena_earnings": "0.01 NEAR"
     }
   ]
 }
