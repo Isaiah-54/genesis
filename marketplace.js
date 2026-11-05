@@ -38,6 +38,14 @@
 
   let accountId = null;
   let selectedTokenId = null; // the token picked by tapping one of your NFT cards
+  let breedParents = []; // parent token ids for breeding, in pick order (max 2)
+  let myTokens = []; // owned tokens, set by loadMyNfts (the breed grid reads it)
+  // Core generations, keyed by token id. The Core is the source of truth
+  // for an agent's CURRENT generation: an agent that evolved has a higher
+  // Core generation than its NFT's birth generation (the NFT metadata is
+  // immutable, so it still says the birth gen). genFromToken prefers this
+  // cache when present, so an evolved agent shows its current gen card.
+  let coreGenCache = {};
 
   function $(id) { return document.getElementById(id); }
 
@@ -129,7 +137,12 @@
   // Generation lives in the token's `extra` JSON; fall back to the
   // genesis-gen-N token id pattern, then 0. (Some tokens store the
   // generation as the string "3" rather than the number 3 — accept both.)
+  // But the Core's generation wins when known: an evolved agent's Core
+  // generation is higher than its NFT's birth generation, and the card
+  // should show the current generation, not the birth one.
   function genFromToken(token) {
+    const id = token && token.token_id;
+    if (id && Object.prototype.hasOwnProperty.call(coreGenCache, id)) return coreGenCache[id];
     try {
       const extra = token && token.metadata && token.metadata.extra;
       if (extra) {
@@ -141,6 +154,20 @@
     const m = token && token.token_id && String(token.token_id).match(/^genesis-gen-(\d+)$/);
     if (m) return parseInt(m[1], 10);
     return 0;
+  }
+
+  // Fill coreGenCache for a set of token ids from the Core registry.
+  // Tokens that are not registered (or whose read fails) are left out,
+  // so genFromToken falls back to the NFT metadata for them.
+  async function loadCoreGens(tokenIds) {
+    const ids = (tokenIds || []).filter(Boolean);
+    for (const id of ids) {
+      if (Object.prototype.hasOwnProperty.call(coreGenCache, id)) continue;
+      try {
+        const agent = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: id });
+        if (agent && Number.isInteger(agent.generation)) coreGenCache[id] = agent.generation;
+      } catch (_) {}
+    }
   }
 
   function genCardUrl(gen) {
@@ -214,6 +241,8 @@
     if (!accountId) {
       grid.innerHTML = '';
       if (status) status.textContent = 'Connect a wallet (top bar) to see the NFTs you own.';
+      myTokens = [];
+      loadBreedNfts();
       return;
     }
     if (status) status.textContent = 'Loading the NFTs this wallet owns…';
@@ -225,6 +254,8 @@
       // the manual token id below still works.
       grid.innerHTML = '';
       if (status) status.textContent = 'Could not detect this wallet\u2019s NFTs (' + (e.message || e) + ') — type the token id below instead.';
+      myTokens = [];
+      loadBreedNfts();
       return;
     }
     if (!tokens.length) {
@@ -232,6 +263,8 @@
       if (status) {
         status.innerHTML = 'This wallet owns no agent NFTs yet — <a href="index.html#mint">mint one first</a>.';
       }
+      myTokens = [];
+      loadBreedNfts();
       return;
     }
     if (status) {
@@ -239,6 +272,10 @@
         ? 'This wallet owns 1 agent NFT — tap it to list it.'
         : 'This wallet owns ' + tokens.length + ' agent NFTs — tap the one you want to list.';
     }
+    // The CURRENT generation comes from the Core (an evolved agent's
+    // Core generation is higher than its NFT's birth generation), so
+    // fetch it before rendering the cards.
+    await loadCoreGens(tokens.map(t => t.token_id));
     // Keep a previous selection if that token is still owned.
     if (selectedTokenId && !tokens.some(function (t) { return t.token_id === selectedTokenId; })) {
       selectedTokenId = null;
@@ -246,6 +283,200 @@
       if (input) input.value = '';
     }
     grid.innerHTML = tokens.map(myNftCard).join('');
+    myTokens = tokens;
+    loadBreedNfts();
+  }
+
+  // ─── Breed ─────────────────────────────────────────────────────────
+  // Two parents, picked by tapping owned NFT cards (same picker pattern
+  // as the list section, but up to two, in pick order). The breed flow
+  // is two wallet transactions: breed on the Core (0.5 NEAR birth cost),
+  // then nft_mint for the child (0.1 NEAR deposit). The child's
+  // generation and skills come from the Core record read back after
+  // breed, and BOTH parents are recorded in the NFT metadata `extra`.
+  function breedNftCard(token) {
+    const gen = genFromToken(token);
+    const title = (token && token.metadata && token.metadata.title) || token.token_id;
+    const slot = breedParents.indexOf(token.token_id);
+    const label = slot === 0 ? 'PARENT 1 — tap to unpick'
+      : slot === 1 ? 'PARENT 2 — tap to unpick'
+      : 'Tap to pick as parent';
+    return '<div class="card pick' + (slot >= 0 ? ' selected' : '') + '" style="margin:0" data-breed-token="' + esc(token.token_id) + '" role="button" tabindex="0">' +
+      '<img src="' + esc(genCardUrl(gen)) + '" alt="Genesis generation ' + gen + ' card" style="width:100%;border-radius:12px;margin-bottom:10px">' +
+      '<h3>' + esc(token.token_id) + '</h3>' +
+      '<p class="small">Generation ' + gen + ' · ' + esc(title) + '</p>' +
+      '<p><span class="tag pick-tag">' + label + '</span></p>' +
+      '</div>';
+  }
+
+  function refreshBreedCards() {
+    const grid = $('breedNfts');
+    if (!grid) return;
+    grid.querySelectorAll('[data-breed-token]').forEach(function (el) {
+      const tokenId = el.getAttribute('data-breed-token');
+      const slot = breedParents.indexOf(tokenId);
+      el.classList.toggle('selected', slot >= 0);
+      const tag = el.querySelector('.pick-tag');
+      if (tag) tag.textContent = slot === 0 ? 'PARENT 1 — tap to unpick' : slot === 1 ? 'PARENT 2 — tap to unpick' : 'Tap to pick as parent';
+    });
+    const ps = $('breedParentsStatus');
+    if (ps) {
+      ps.textContent = breedParents.length === 0
+        ? 'Tap two of your NFTs above to pick the parents.'
+        : breedParents.length === 1
+          ? 'Parent 1: ' + breedParents[0] + ' — tap one more NFT for Parent 2.'
+          : 'Parents: ' + breedParents[0] + ' + ' + breedParents[1] + ' — tap one to unpick it.';
+    }
+  }
+
+  // Tap a card: it becomes Parent 1, then Parent 2. Tapping a picked
+  // card unpicks it. A third tap is refused until one is unpicked.
+  function selectBreedParent(tokenId) {
+    const at = breedParents.indexOf(tokenId);
+    if (at >= 0) {
+      breedParents.splice(at, 1);
+    } else if (breedParents.length >= 2) {
+      const s = $('breedStatus');
+      if (s) s.textContent = 'Two parents are already picked — tap one of them to unpick it first.';
+      return;
+    } else {
+      breedParents.push(tokenId);
+    }
+    refreshBreedCards();
+  }
+
+  function loadBreedNfts() {
+    const grid = $('breedNfts');
+    const status = $('breedNftsStatus');
+    if (!grid) return;
+    if (!accountId) {
+      grid.innerHTML = '';
+      if (status) status.textContent = 'Connect a wallet (top bar) to see the NFTs you own.';
+      return;
+    }
+    if (!myTokens.length) {
+      grid.innerHTML = '';
+      if (status) status.textContent = 'This wallet owns no agent NFTs yet — mint one first, then breed.';
+      return;
+    }
+    // Drop parents that are no longer owned (listed, sold, or delisted).
+    breedParents = breedParents.filter(function (t) { return myTokens.some(function (x) { return x.token_id === t; }); });
+    if (status) {
+      status.textContent = myTokens.length === 1
+        ? 'This wallet owns 1 agent NFT — breeding needs two parents, so mint or buy one more.'
+        : 'This wallet owns ' + myTokens.length + ' agent NFTs — tap two to pick the parents.';
+    }
+    grid.innerHTML = myTokens.map(breedNftCard).join('');
+    refreshBreedCards();
+  }
+
+  async function breedAgents() {
+    const nw = walletOrNull();
+    if (!nw) return;
+    const status = $('breedStatus');
+    const resultEl = $('breedResult');
+    if (resultEl) resultEl.innerHTML = '';
+    const childId = ($('breedChildId') && $('breedChildId').value || '').trim();
+    if (!childId) { if (status) status.textContent = 'Enter a child token id (must be unique).'; return; }
+    if (breedParents.length !== 2) { if (status) status.textContent = 'Pick exactly two parents above first.'; return; }
+    const parent1 = breedParents[0];
+    const parent2 = breedParents[1];
+    if (status) status.textContent = 'Checking the parents and the child id…';
+    // Both parents must be registered in the Core and alive — the Core
+    // breed() panics otherwise, so check first and refuse clearly.
+    let p1, p2;
+    try {
+      p1 = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: parent1 });
+      p2 = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: parent2 });
+    } catch (e) {
+      if (status) status.textContent = 'Could not read the parents from the Core: ' + (e.message || e);
+      return;
+    }
+    if (!p1) { if (status) status.textContent = parent1 + ' is not registered in the Core — only registered agents can breed.'; return; }
+    if (p1.status !== 'Alive') { if (status) status.textContent = parent1 + ' is not alive (status ' + p1.status + ') — only living agents can breed.'; return; }
+    if (!p2) { if (status) status.textContent = parent2 + ' is not registered in the Core — only registered agents can breed.'; return; }
+    if (p2.status !== 'Alive') { if (status) status.textContent = parent2 + ' is not alive (status ' + p2.status + ') — only living agents can breed.'; return; }
+    // The child id must be free — the shared contract rejects duplicates.
+    try {
+      const existing = await nftToken(childId);
+      if (existing) { if (status) status.textContent = 'That child token id is already taken — pick a new unique token id.'; return; }
+    } catch (_) { /* nftToken throws when the token does not exist: free */ }
+    if (status) status.textContent = 'Approve the breed in your wallet… (0.5 NEAR birth cost)';
+    let breedHash = '';
+    try {
+      const breedRes = await nw.sendTransaction({
+        receiverId: CORE_CONTRACT,
+        actions: [{
+          type: 'FunctionCall', methodName: 'breed',
+          args: { token_id: childId, owner_id: accountId, parent1: parent1, parent2: parent2 },
+          gas: '100000000000000', deposit: '500000000000000000000000', // 0.5 NEAR birth cost
+        }],
+      });
+      breedHash = txHash(breedRes);
+    } catch (e) {
+      const msg = e.message || String(e);
+      if (status) status.textContent = txFailed(msg) || ('Breed failed: ' + msg);
+      return;
+    }
+    // Read the child back: the Core sets generation and skills.
+    if (status) status.textContent = 'Breed submitted — reading the child back from the Core…';
+    let child = null;
+    try { child = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: childId }); } catch (_) {}
+    if (!child) {
+      if (status) status.textContent = 'Breed submitted but the child is not in the Core yet — wait a moment and refresh, then mint its NFT from the CLI.';
+      return;
+    }
+    const gen = child.generation;
+    const skills = child.skill || { speed: 1, quality: 1, cost_eff: 1 };
+    if (status) status.textContent = 'Child is generation ' + gen + ' — approve the mint in your wallet… (0.1 NEAR deposit)';
+    let mintHash = '';
+    try {
+      const metadata = {
+        title: 'Genesis Gen ' + gen,
+        description: 'Genesis agent, generation ' + gen + ', parents ' + parent1 + ' and ' + parent2 + '. Works jobs, gets verified, earns, can reproduce or die.',
+        media: genCardUrl(gen),
+        copies: 1,
+        extra: JSON.stringify({ generation: gen, parent: parent1, second_parent: parent2, skills: skills, role: 'general', status: 'alive' }),
+      };
+      const mintRes = await nw.sendTransaction({
+        receiverId: NFT_CONTRACT,
+        actions: [{
+          type: 'FunctionCall', methodName: 'nft_mint',
+          args: { token_id: childId, receiver_id: accountId, token_metadata: metadata },
+          gas: '300000000000000', deposit: '100000000000000000000000', // 0.1 NEAR
+        }],
+      });
+      mintHash = txHash(mintRes);
+    } catch (e) {
+      const msg = e.message || String(e);
+      if (status) {
+        status.innerHTML = 'Breed succeeded' + txLink(breedHash) + ' but the mint failed: ' + esc(txFailed(msg) || msg) +
+          ' The child is registered in the Core — mint its NFT from the CLI: node src/cli.js mint ' + esc(childId) + ' ' + esc(accountId) + ' "Genesis Gen ' + gen + '" ' + gen + ' ' + esc(parent1) + ' ' + esc(parent2);
+        status.style.color = 'var(--red)';
+      }
+      return;
+    }
+    if (status) {
+      status.innerHTML = 'Child born: <span class="mono">' + esc(childId) + '</span> — generation ' + gen +
+        ' · skills speed ' + skills.speed + ' / quality ' + skills.quality + ' / costEff ' + skills.cost_eff +
+        ' · parents ' + esc(parent1) + ' + ' + esc(parent2) +
+        ' · Breed tx' + txLink(breedHash) + ' · Mint tx' + txLink(mintHash);
+      status.style.color = 'var(--green)';
+    }
+    if (resultEl) {
+      resultEl.innerHTML = '<div class="card" style="margin:10px 0 0 0">' +
+        '<img src="' + esc(genCardUrl(gen)) + '" alt="Genesis generation ' + gen + ' card" style="width:100%;border-radius:12px;margin-bottom:10px">' +
+        '<h3>' + esc(childId) + '</h3>' +
+        '<p class="small">Generation ' + gen + ' · Parents ' + esc(parent1) + ' + ' + esc(parent2) + '</p>' +
+        '<p>Skills: speed ' + skills.speed + ' · quality ' + skills.quality + ' · costEff ' + skills.cost_eff + '</p>' +
+        '<p><a class="btn btn2 btn-sm" href="cv.html">View CV</a></p>' +
+        '</div>';
+    }
+    breedParents = [];
+    const input = $('breedChildId');
+    if (input) input.value = '';
+    await loadListings();
+    await loadMyNfts(); // ownership changed: the child NFT is now yours
   }
 
   function txHash(result) {
@@ -311,7 +542,10 @@
     }
     setStatus(listings.length + ' listing' + (listings.length === 1 ? '' : 's') +
       ' · 5% of every sale goes to the treasury.');
-    // Each token's title / generation comes from the NFT contract.
+    // Each token's title / generation comes from the NFT contract, but
+    // the CURRENT generation comes from the Core (an evolved agent's
+    // Core generation is higher than its NFT's birth generation).
+    await loadCoreGens(listings.map(l => l.token_id));
     const cards = [];
     const myCards = [];
     for (const listing of listings) {
@@ -430,6 +664,26 @@
   function wireButtons() {
     const btn = $('listNftBtn');
     if (btn) btn.addEventListener('click', listNft);
+    const breedBtn = $('breedBtn');
+    if (breedBtn) breedBtn.addEventListener('click', breedAgents);
+    // Breed picker: tap a card to pick Parent 1, then Parent 2; tap a
+    // picked card again to unpick it. Same delegated pattern as the list
+    // picker, but with its own data attribute and selection (max 2).
+    const breedGrid = $('breedNfts');
+    if (breedGrid) {
+      breedGrid.addEventListener('click', function (ev) {
+        const target = ev.target && ev.target.closest ? ev.target.closest('[data-breed-token]') : null;
+        if (!target) return;
+        selectBreedParent(target.getAttribute('data-breed-token'));
+      });
+      breedGrid.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        const target = ev.target && ev.target.closest ? ev.target.closest('[data-breed-token]') : null;
+        if (!target) return;
+        ev.preventDefault();
+        selectBreedParent(target.getAttribute('data-breed-token'));
+      });
+    }
     // Typing a token id by hand clears the card selection, so the input
     // and the picked card never disagree.
     const tokenInput = $('listTokenId');

@@ -98,14 +98,24 @@
       <input id="mintToken" value="genesis-visitor-2">
       <label class="small">Title</label>
       <input id="mintTitle" value="Genesis Visitor Agent">
-      <label class="small">Generation</label>
-      <input id="mintGen" value="0">
+      <label class="small">Generation — minting is gen 0 only. Higher generations are earned by winning (3 paid jobs per generation, up to gen 9), not bought.</label>
+      <input id="mintGen" value="0" readonly>
       <label class="small">Parent token (or treasury)</label>
       <input id="mintParent" value="treasury">
       <p><button id="mintBtn">Mint agent NFT on testnet</button></p>
       <p class="small" id="mintStatus"></p>
     </div>
     <p class="small">Need testnet NEAR? Use the faucet, then connect and mint. Unique token ids only.</p>
+  </div>
+
+  <p class="label">EVOLVE</p>
+  <div class="card" id="evolve">
+    <h2 style="margin-top:0">Evolve your agent by winning</h2>
+    <p>Minting is gen 0 only. An agent evolves one generation after <b>3 more paid wins</b> since its last evolution, up to the final <b>gen 9</b>. Each evolution makes it smarter — quality +0.1, speed +0.05, cost efficiency +0.05 — so gen 1 is smarter than gen 0, gen 2 smarter than gen 1, and so on. The token keeps its id; the generation and skills live in the Core registry.</p>
+    <label class="small">Token id</label>
+    <input id="evolveToken" value="genesis-visitor-1">
+    <p><button id="evolveCheckBtn">Check evolve progress</button> <button id="evolveBtn" style="display:none">Evolve this agent</button></p>
+    <p class="small" id="evolveStatus"></p>
   </div>
 
   <p class="label">TRY A JOB</p>
@@ -121,6 +131,24 @@
     <p><button id="runJobBtn">Run the job</button></p>
     <div class="out" id="jobOut">Press Run the job.</div>
     <p class="small" id="jobVerdict"></p>
+  </div>
+
+  <p class="label">JOB BOARD · ONCHAIN</p>
+  <div class="card" id="job-board">
+    <h2 style="margin-top:0">Open jobs — posted onchain, reward locked in escrow</h2>
+    <p>Jobs live in the Genesis Core contract (<span class="mono">core.genesisdemo354551.testnet</span>), not in a file. The poster locks the reward as escrow when posting; the winner is paid from it through the Core. Open jobs first, paid jobs after.</p>
+    <p class="small" id="jobBoardStatus">Loading jobs from the Core…</p>
+    <div id="jobBoardList"></div>
+    <h3>Post a job</h3>
+    <p class="small">Connect a wallet (top bar) and the reward leaves your wallet as escrow when you post. Anyone can then work the job; the winner is paid from the escrow.</p>
+    <label class="small">Brief</label>
+    <input id="postJobBrief" value="NEAR NFTs global contract mint">
+    <label class="small">Keywords (comma separated)</label>
+    <input id="postJobKeywords" value="near, nft, mint">
+    <label class="small">Reward (testnet NEAR, locked as escrow)</label>
+    <input id="postJobReward" value="0.01" inputmode="decimal">
+    <p><button id="postJobBtn">Post job onchain</button></p>
+    <p class="small" id="postJobStatus"></p>
   </div>
 
   <p class="label">AGENT JOB · NO CLI</p>

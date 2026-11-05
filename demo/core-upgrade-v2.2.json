@@ -1,0 +1,133 @@
+{
+  "core": "core.genesisdemo354551.testnet",
+  "wasmBytes": 158710,
+  "wasmSha256": "1063259d14f8d6961d4690654ddeec98b9cc0223c48e32522077e0eb9e82f5f4",
+  "before": {
+    "agent_count": 3,
+    "coreBalanceNear": 5.4941621136993,
+    "codeHash": "AweaEioCdRn8b1XZNm2RhJXRkoYFiyKyqgmR7qUWU276"
+  },
+  "txs": {
+    "deploy": {
+      "hash": "f4c5f2010806ca28bc3e6a44c11a1674ddcc47e280ce3081f00f9e8e694ddb84",
+      "status": "Success"
+    },
+    "migrate": {
+      "hash": "e1936e5ba6486d39602d1c41031c1b0238452d9b9b6c13f5aa168e007feab7a8",
+      "status": "Success"
+    }
+  },
+  "verification": {
+    "agent_count": 3,
+    "get_agent_genesis_gen_2": {
+      "token_id": "genesis-gen-2",
+      "owner_id": "gen2.genesisdemo354551.testnet",
+      "generation": 2,
+      "parent": "genesis-gen-1",
+      "second_parent": null,
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "wins": 0,
+      "evolutions": 0,
+      "earned": "0",
+      "created_at": 1793863067986784300
+    },
+    "get_agent_genesis_gen_3": {
+      "token_id": "genesis-gen-3",
+      "owner_id": "gen3.genesisdemo354551.testnet",
+      "generation": 3,
+      "parent": "genesis-gen-2",
+      "second_parent": null,
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "wins": 0,
+      "evolutions": 0,
+      "earned": "0",
+      "created_at": 1793863091092303400
+    },
+    "get_agent_genesis_visitor_1": {
+      "token_id": "genesis-visitor-1",
+      "owner_id": "otoyo4real.testnet",
+      "generation": 0,
+      "parent": "treasury",
+      "second_parent": null,
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "wins": 0,
+      "evolutions": 0,
+      "earned": "0",
+      "created_at": 1793863108669632300
+    },
+    "get_listings": [],
+    "get_frontier_sample_job": {
+      "best_score": 483,
+      "best_output_hash": "7181c5fabbf97b035e0e4fa3ab25f7cc02f05a3ae4e34e4406eea56923c7bb57",
+      "winner": "gen2.genesisdemo354551.testnet"
+    },
+    "get_jobs": [
+      {
+        "job_id": "c97c47a96f9ed359520eee6aa6e9605bb8ef13dca1c04a2fe97b522c524e7726",
+        "poster": "genesisdemo354551.testnet",
+        "reward": "10000000000000000000000",
+        "brief": "NEAR NFTs global contract mint",
+        "keywords": [
+          "near",
+          "nft",
+          "mint"
+        ],
+        "min_words": 20,
+        "status": "paid",
+        "winner": "clearsite587.testnet"
+      },
+      {
+        "job_id": "db14750cadae8e5ac80a483457bf3a1b73fe4085e516684b78bf97679b319691",
+        "poster": "genesisdemo354551.testnet",
+        "reward": "10000000000000000000000",
+        "brief": "NEAR NFTs global contract mint",
+        "keywords": [
+          "near",
+          "nft",
+          "mint"
+        ],
+        "min_words": 0,
+        "status": "paid",
+        "winner": "clearsite587.testnet"
+      },
+      {
+        "job_id": "7181c5fabbf97b035e0e4fa3ab25f7cc02f05a3ae4e34e4406eea56923c7bb57",
+        "poster": "genesisdemo354551.testnet",
+        "reward": "10000000000000000000000",
+        "brief": "NEAR NFTs global contract mint",
+        "keywords": [
+          "near",
+          "nft",
+          "mint"
+        ],
+        "min_words": 0,
+        "status": "paid",
+        "winner": "gen2.genesisdemo354551.testnet"
+      }
+    ],
+    "coreBalanceNear": 5.492640266179929,
+    "codeHash": "26yD8nPV7diG9eukFhbVisWnEmEzAaUnAkh5uL67QzK5",
+    "note": "agent_count must stay 3 and the three agents must be present, each with wins 0 and evolutions 0 — the migration preserves the registry. get_frontier (sample job) must still be 483 (gen2) and get_listings must be exactly as before the migrate."
+  }
+}

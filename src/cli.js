@@ -54,6 +54,74 @@ async function sendTx({ signerId, keyPair, receiverId, actions, dryRun, label })
   if (status !== 'Success') throw new Error(label + ' failed: ' + JSON.stringify(result).slice(0, 1000));
   return { hash: Buffer.from(hash).toString('hex'), status };
 }
+// Post a job to the Core escrow (only if it is not already posted) and
+// pay it to a winner. The Core enforces the frontier: pay_job panics
+// when the score does not beat the best score on that job definition,
+// and records the new frontier when it does. Returns { post, pay } where
+// post is the post tx hash, 'already posted', or 'dry-run', and pay is
+// the pay tx hash or 'dry-run'. This is what the arena uses to pay a
+// winner through the Core escrow instead of a direct treasury transfer.
+async function corePayJob({ jobId, winner, score, jobDefId, rewardNear, brief, keywords, dryRun }) {
+  let existing = null;
+  try { existing = viewCall(CORE_CONTRACT, 'get_job', { job_id: jobId }); } catch (_) {}
+  let post;
+  if (existing) {
+    post = 'already posted';
+    console.log('Job', jobId.slice(0, 12) + '…', 'already onchain (status', existing.status + ') — skipping post_job.');
+  } else {
+    const r = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('post_job', { job_id: jobId, brief, keywords, min_words: 0 }, 100000000000000n, utils.format.parseNearAmount(rewardNear))], dryRun, label: 'post job ' + jobId.slice(0, 12) });
+    post = dryRun ? 'dry-run' : r.hash;
+    console.log('post_job:', post);
+  }
+  const p = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('pay_job', { job_id: jobId, winner, score, job_def_id: jobDefId }, 100000000000000n, 0n)], dryRun, label: 'pay job to ' + winner });
+  const pay = dryRun ? 'dry-run' : p.hash;
+  console.log('pay_job:', pay);
+  return { post, pay };
+}
+
+// Breed two living agents into a child: check both parents are registered
+// and alive, call the Core breed (0.5 NEAR birth cost from the treasury),
+// read the child back for its generation and skills, then mint the child
+// NFT with BOTH parents recorded in `extra`. Returns the breed tx, the
+// mint tx, and the child generation + skills.
+async function breedAgent({ childTokenId, parent1, parent2, ownerId, dryRun }) {
+  const p1 = viewCall(CORE_CONTRACT, 'get_agent', { token_id: parent1 });
+  if (!p1) throw new Error(`Parent 1 ${parent1} is not registered in the Core — breed needs two registered agents.`);
+  if (p1.status !== 'Alive') throw new Error(`Parent 1 ${parent1} is not alive (status ${p1.status}) — only living agents can breed.`);
+  const p2 = viewCall(CORE_CONTRACT, 'get_agent', { token_id: parent2 });
+  if (!p2) throw new Error(`Parent 2 ${parent2} is not registered in the Core — breed needs two registered agents.`);
+  if (p2.status !== 'Alive') throw new Error(`Parent 2 ${parent2} is not alive (status ${p2.status}) — only living agents can breed.`);
+  const breed = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('breed', { token_id: childTokenId, owner_id: ownerId, parent1, parent2 }, 100000000000000n, utils.format.parseNearAmount(BIRTH_COST_NEAR))], dryRun, label: 'breed ' + childTokenId });
+  const breedTx = dryRun ? 'dry-run' : breed.hash;
+  console.log('breed tx:', breedTx);
+  // Read the child back: the Core sets generation = max(parent gens) + 1
+  // and skills = the parents' average plus a small mutation.
+  let child;
+  if (dryRun) {
+    // Nothing was broadcast, so the child does not exist yet: show the
+    // expected values (plain average; the onchain child adds a small
+    // mutation from the block timestamp).
+    const gen = Math.max(p1.generation, p2.generation) + 1;
+    const avg = (f) => +(((p1.skill[f] + p2.skill[f]) / 2).toFixed(2));
+    child = { generation: gen, skill: { speed: avg('speed'), quality: avg('quality'), cost_eff: avg('cost_eff') } };
+    console.log('Child (expected, dry-run): generation', gen, '| skills', JSON.stringify(child.skill), '(the onchain child adds a small mutation)');
+  } else {
+    child = viewCall(CORE_CONTRACT, 'get_agent', { token_id: childTokenId });
+    if (!child) throw new Error('Breed tx succeeded but the child ' + childTokenId + ' is not in the Core registry — check the tx before minting.');
+  }
+  const gen = child.generation;
+  const metadata = {
+    title: `Genesis Gen ${gen}`,
+    description: `Genesis agent, generation ${gen}, parents ${parent1} and ${parent2}. Works jobs, gets verified, earns, can reproduce or die.`,
+    media: mediaForGen(gen),
+    extra: JSON.stringify({ generation: gen, parent: parent1, second_parent: parent2, skills: child.skill, role: 'general', status: 'alive' }),
+  };
+  const mint = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: childTokenId, receiver_id: ownerId, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))], dryRun, label: 'mint ' + childTokenId });
+  const mintTx = dryRun ? 'dry-run' : mint.hash;
+  console.log('mint tx:', mintTx);
+  console.log('Child:', childTokenId, '| generation', gen, '| skills', JSON.stringify(child.skill), '| parents', parent1, '+', parent2, '| owner', ownerId);
+  return { breedTx, mintTx, generation: gen, skills: child.skill };
+}
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
@@ -66,10 +134,14 @@ async function main() {
   token <id>              One NFT's owner + metadata
   balance <account>       One account's balance
   create-agent <id> <fund>  Create agent subaccount (key saved FIRST)
-  mint <token> <receiver> <title> <gen> <parent>   Mint a Genesis NFT
+  mint <token> <receiver> <title> <gen> <parent> [parent2]   Mint a Genesis NFT (parent2 records a second parent, e.g. a bred child)
   core-birth <token> <owner> <gen> <parent|->  Register an agent in the onchain Core registry (0.5 NEAR from treasury)
   core-agent <token>  One agent's Core registry record
   core-count          How many agents the Core registry holds
+  core-pay-job <job_id> <winner> <score> <job_def_id> [reward_near] [brief] [keywords]  Pay a winner through the Core escrow (posts the job first if needed; the frontier is checked and updated onchain)
+  post-job <brief> <keywords> <reward_near>  Post a job to the Core escrow and print its job id
+  jobs                Every job on the Core (open first)
+  breed <child> <parent1> <parent2> [owner]  Breed two living agents into a child (0.5 NEAR birth cost) and mint the child NFT with both parents recorded
   pay <receiver> <amount> Pay testnet NEAR from treasury
   transfer-nft <token> <receiver>  Transfer NFT (refuses locked tokens)
   job <agent> <page_url>  Real job: fetch, verify, pay 0.01 on PASS
@@ -113,9 +185,38 @@ async function main() {
     return;
   }
   if (cmd === 'mint') {
-    const [, tokenId, receiver, title, gen, parent] = a;
-    const metadata = { title, description: `Genesis agent, generation ${gen}, parent ${parent}.`, media: mediaForGen(gen), extra: JSON.stringify({ generation: gen, parent, status: 'alive' }) };
+    const [, tokenId, receiver, title, gen, parent, parent2] = a;
+    // Minting is gen 0 only. A higher generation is EARNED — an agent
+    // evolves by winning 3 paid jobs per generation (see `evolve`), or
+    // is born by breeding two proven parents (see `breed`). Minting a
+    // high gen directly would make generations meaningless.
+    if (Number(gen) !== 0) throw new Error(`Minting is gen 0 only (you asked for gen ${gen}). Higher generations are earned by winning — run 'evolve' after 3 paid wins, or 'breed' two proven parents.`);
+    const metadata = { title, description: `Genesis agent, generation ${gen}, parent ${parent}${parent2 ? ' and ' + parent2 : ''}.`, media: mediaForGen(gen), extra: JSON.stringify({ generation: gen, parent, ...(parent2 ? { second_parent: parent2 } : {}), status: 'alive' }) };
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: tokenId, receiver_id: receiver, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))], dryRun, label: 'mint ' + tokenId }));
+    return;
+  }
+  if (cmd === 'evolve') {
+    // Evolve one generation by winning: needs 3 more paid wins since the
+    // last evolution, up to the final gen 9. Each evolution makes the
+    // agent smarter (+0.1 quality, +0.05 speed, +0.05 costEff, capped
+    // at 2.0). The token keeps its id; the generation and skills live in
+    // the Core registry.
+    const [, tokenId] = a;
+    if (!tokenId) throw new Error('Usage: node src/cli.js evolve <token_id>');
+    const before = viewCall(CORE_CONTRACT, 'get_evolve_status', { token_id: tokenId });
+    if (!before) throw new Error(`Agent not found in the Core registry: ${tokenId}`);
+    if (!before.can_evolve) throw new Error(`Cannot evolve ${tokenId} yet: gen ${before.generation}, ${before.wins} wins, ${before.wins_needed} more win(s) needed (3 per generation).${before.generation >= before.max_generation ? ' It is already at the final generation.' : ''}`);
+    const r = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('evolve', { token_id: tokenId }, 100000000000000n, 0n)], dryRun, label: 'evolve ' + tokenId });
+    const after = dryRun ? null : viewCall(CORE_CONTRACT, 'get_agent', { token_id: tokenId });
+    console.log(JSON.stringify({ token: tokenId, before: { generation: before.generation, wins: before.wins, evolutions: before.evolutions }, tx: dryRun ? 'dry-run' : r.hash, after: after ? { generation: after.generation, evolutions: after.evolutions, skill: after.skill } : 'dry-run — no onchain change' }));
+    return;
+  }
+  if (cmd === 'evolve-status') {
+    const [, tokenId] = a;
+    if (!tokenId) throw new Error('Usage: node src/cli.js evolve-status <token_id>');
+    const s = viewCall(CORE_CONTRACT, 'get_evolve_status', { token_id: tokenId });
+    if (!s) { console.log(`Agent not found in the Core registry: ${tokenId}`); return; }
+    console.log(`${s.token_id}: gen ${s.generation} (max ${s.max_generation}) | wins ${s.wins} | evolutions ${s.evolutions} | ${s.can_evolve ? 'CAN EVOLVE NOW — run: node src/cli.js evolve ' + s.token_id : s.wins_needed + ' more win(s) to the next generation (' + s.wins_to_evolve + ' wins per generation)'}`);
     return;
   }
   if (cmd === 'core-birth') {
@@ -123,12 +224,53 @@ async function main() {
     // 0.5 NEAR birth cost from the treasury and stores generation, parent
     // and skills onchain. The owner account must already exist (create it
     // with create-agent first). Skill defaults to 1.0/1.0/1.0 when omitted.
+    // Newborns are gen 0 only — higher generations are earned by evolving
+    // or by breeding (see `evolve` / `breed`).
     const [, tokenId, ownerId, gen, parent] = a;
+    if (Number(gen) !== 0) throw new Error(`core-birth is gen 0 only (you asked for gen ${gen}). Higher generations are earned by winning — register the newborn at gen 0, then 'evolve' it after 3 paid wins, or 'breed' two proven parents.`);
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('birth', { token_id: tokenId, owner_id: ownerId, generation: Number(gen), parent: (!parent || parent === '-') ? null : parent, skill: null }, 100000000000000n, utils.format.parseNearAmount(BIRTH_COST_NEAR))], dryRun, label: 'core-birth ' + tokenId }));
     return;
   }
   if (cmd === 'core-agent') { console.log(JSON.stringify(viewCall(CORE_CONTRACT, 'get_agent', { token_id: a[1] }), null, 2)); return; }
   if (cmd === 'core-count') { console.log('Core registry agents:', viewCall(CORE_CONTRACT, 'agent_count', {})); return; }
+  if (cmd === 'core-pay-job') {
+    const [, jobId, winner, score, jobDefId, rewardNear, brief, keywords] = a;
+    if (!jobId || !winner || score === undefined || !jobDefId) throw new Error('Usage: node src/cli.js core-pay-job <job_id> <winner> <score> <job_def_id> [reward_near] [brief] [keywords]');
+    const r = await corePayJob({ jobId, winner, score: Number(score), jobDefId, rewardNear: rewardNear || '0.01', brief: brief || 'Genesis job', keywords: keywords ? keywords.split(',').map(s => s.trim()).filter(Boolean) : ['genesis'], dryRun });
+    console.log(JSON.stringify(r));
+    return;
+  }
+  if (cmd === 'post-job') {
+    const [, brief, keywords, rewardNear] = a;
+    if (!brief || !keywords || !rewardNear) throw new Error('Usage: node src/cli.js post-job <brief> <keywords-comma-separated> <reward_near>');
+    const kw = keywords.split(',').map(s => s.trim()).filter(Boolean);
+    if (!kw.length) throw new Error('Give at least one keyword, comma separated.');
+    // Unique job id: the caller needs it to work the job. Same shape as
+    // the job-definition id, plus a timestamp so two identical briefs
+    // never collide.
+    const jobId = crypto.createHash('sha256').update(brief + '|' + kw.join(',') + '|' + Date.now()).digest('hex');
+    const r = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('post_job', { job_id: jobId, brief, keywords: kw, min_words: 0 }, 100000000000000n, utils.format.parseNearAmount(rewardNear))], dryRun, label: 'post job ' + jobId.slice(0, 12) });
+    console.log('job_id:', jobId);
+    console.log('post tx:', dryRun ? 'dry-run' : r.hash);
+    return;
+  }
+  if (cmd === 'jobs') {
+    const jobs = viewCall(CORE_CONTRACT, 'get_jobs', {});
+    if (!jobs || !jobs.length) { console.log('No jobs on the Core yet.'); return; }
+    const open = jobs.filter(j => j.status === 'open');
+    const rest = jobs.filter(j => j.status !== 'open');
+    for (const j of [...open, ...rest]) {
+      console.log(`${j.job_id} | [${j.status}] ${String(j.brief || '').slice(0, 60)} | keywords: ${(j.keywords || []).join(', ')} | reward ${(Number(j.reward) / 1e24).toFixed(4)} NEAR | poster ${j.poster} | winner ${j.winner || '-'}`);
+    }
+    return;
+  }
+  if (cmd === 'breed') {
+    const [, childTokenId, parent1, parent2, ownerId] = a;
+    if (!childTokenId || !parent1 || !parent2) throw new Error('Usage: node src/cli.js breed <child_token_id> <parent1_token_id> <parent2_token_id> [owner_id]');
+    const r = await breedAgent({ childTokenId, parent1, parent2, ownerId: ownerId || MASTER, dryRun });
+    console.log(JSON.stringify(r));
+    return;
+  }
   if (cmd === 'pay') { console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: a[1], actions: [transactions.transfer(utils.format.parseNearAmount(a[2]))], dryRun, label: 'pay ' + a[1] })); return; }
   if (cmd === 'transfer-nft') {
     const token = viewCall(NFT_CONTRACT, 'nft_token', { token_id: a[1] });
@@ -144,11 +286,20 @@ async function main() {
     const page = execSync(`curl -s -m 30 ${a[2]} | perl -0777 -pe 's/<script.*?<\\/script>//gs; s/<style.*?<\\/style>//gs' | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
     if (page.length < 500) throw new Error('Fetched page too short for a real job');
     const job = { brief: 'NEAR NFTs global contract mint', keywords: ['near', 'nft', 'mint'], text: page.slice(0, 3000) };
+    // The agent's REAL onchain skill (from the Core), not a hardcoded
+    // 1.0: a higher generation is genuinely smarter — its quality shapes
+    // the worker's brief and token budget. Falls back to 1.0 if the
+    // Core read fails (e.g. the token is not registered yet).
+    let skill = { speed: 1, quality: 1, cost_eff: 1 };
+    try {
+      const rec = viewCall(CORE_CONTRACT, 'get_agent', { token_id: a[1] });
+      if (rec && rec.skill) skill = rec.skill;
+    } catch (_) {}
     // Labinius-style: 3 fresh runs, all must pass the gates, median score counts.
     const outputs = [];
     for (let i = 0; i < 3; i++) {
-      const llm = await workLLM(job, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
-      console.log(`Run ${i + 1}/3 — worker:`, llm.worker, '| model:', llm.model);
+      const llm = await workLLM(job, { skill: { speed: skill.speed, quality: skill.quality, costEff: skill.cost_eff, language: 'en' } });
+      console.log(`Run ${i + 1}/3 — worker:`, llm.worker, '| model:', llm.model, '| quality:', skill.quality);
       outputs.push(llm.output);
     }
     const v = verifyRuns(job, outputs);

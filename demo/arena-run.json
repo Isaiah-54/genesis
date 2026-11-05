@@ -1,48 +1,94 @@
 {
   "job": {
-    "id": "job-1793829170376",
     "brief": "NEAR NFTs global contract mint",
     "keywords": [
       "near",
       "nft",
       "mint"
     ],
-    "minWords": 20,
-    "pay": "0.01",
-    "poster": "genesisdemo354551.testnet",
-    "status": "open",
-    "created": "2026-11-04T21:52:50.376Z"
+    "job_def_id": "f1d2c1eab156e2882c5c384e77aef3a69c5458c3ead77a528ac9cfa341f7cd52",
+    "source": "https://docs.near.org/primitives/nft/nft"
+  },
+  "frontier_before": {
+    "best_score": 483,
+    "winner": "gen2.genesisdemo354551.testnet"
   },
   "entries": [
     {
       "agent": "gen2.genesisdemo354551.testnet",
       "worker": "llm",
       "model": "openai (pollinations)",
-      "output": "To create and mint your own NFTs on the NEAR network, simply use the global NFT contract that NEAR provides. Attach this pre‑built code to your account, set the owner and your collection details, and then call `nft_mint` whenever you want to add a new token to your collection. This reusable contract keeps costs low and lets you focus on setting up and minting your NFTs.",
-      "words": 68,
+      "runs": [
+        {
+          "run": 1,
+          "output": "NEAR is a blockchain platform where you can host smart contracts that manage digital assets.  \nAn nft contract on NEAR follows the official standard, letting you create, share, and query unique digital items.  \nWhen you\u2019re ready for new tokens, you call the nft_mint method to issue a fresh, single\u2011owned digital asset."
+        },
+        {
+          "run": 2,
+          "output": "NEAR is a blockchain platform where you can host smart contracts that manage digital assets.  \nAn nft contract on NEAR follows the official standard, letting you create, share, and query unique digital items.  \nWhen you\u2019re ready for new tokens, you call the nft_mint method to issue a fresh, single\u2011owned digital asset."
+        },
+        {
+          "run": 3,
+          "output": "NEAR is a blockchain platform where you can host smart contracts that manage digital assets.  \nAn nft contract on NEAR follows the official standard, letting you create, share, and query unique digital items.  \nWhen you\u2019re ready for new tokens, you call the nft_mint method to issue a fresh, single\u2011owned digital asset."
+        }
+      ],
+      "scores": [
+        453,
+        453,
+        453
+      ],
+      "medianScore": 453,
+      "pass": true,
+      "output": "NEAR is a blockchain platform where you can host smart contracts that manage digital assets.  \nAn nft contract on NEAR follows the official standard, letting you create, share, and query unique digital items.  \nWhen you\u2019re ready for new tokens, you call the nft_mint method to issue a fresh, single\u2011owned digital asset.",
+      "outputHash": "599c8c79462a0caa3e93f6d14d9027f5b51ea43a8e2b2dbebba1c2fd6d3a6494",
+      "words": 53,
       "keywordsCovered": 3,
       "keywordsTotal": 3,
-      "pass": true,
-      "score": 103.4,
-      "outputHash": "acea9b6f5b1d76f0bbf96079abcd44177cd7d464746ee897c852336a70dc97b7"
+      "score": 453
     },
     {
       "agent": "gen3.genesisdemo354551.testnet",
       "worker": "llm",
       "model": "openai (pollinations)",
-      "output": "**Deploying a global NFT contract and minting on NEAR**\n\n1. **Attach the global code to your account**  \n   ```bash\n   near contract deploy <your-account-id> \\\n     --use-global-account-id nft.globals.primitives.near \\\n     --with-init-call new \\\n     --json-args '{\"owner_id\":\"<your-account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\"}}'\n   ```\n   *This attaches the pre‑deployed global NFT contract to <your-account-id> and initializes it as a new collection owned by you.*\n\n2. **Mint an NFT in the collection**  \n   ```bash\n   near call <your-account-id> nft_mint \\\n     --args '{\"owner_id\":\"<your-account-id>\",\"token_id\":\"unique-token-id\",\"metadata\":{\"title\":\"Token Title\"}}'\n   ```\n   *Calling `nft_mint` creates a new token in the collection you just set up.*\n\nUse the NEAR CLI commands above, replacing placeholders with your data. The `nft_mint` function is the standard method for creating tokens on the global NFT contract.",
-      "words": 140,
+      "runs": [
+        {
+          "run": 1,
+          "output": "To deploy and mint a NFT on NEAR with the global contract, follow these three steps:\n\n1. Run a NEAR CLI command that attaches the pre\u2011deployed global NFT contract to your account and initializes it with your own owner ID and collection metadata, for example:  \n`near contract deploy <account-id> use-global-account-id nft.globals.primitives.near \\ with-init-call new \\ json-args '{\"owner_id\":\"<account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\",\"symbol\":\"MYN\",\"decimals\":0,\"media\":\"<url>\",\"reference\":\"<url>\",\"reference_hash\":\"<hash>\"}}'`.  \n2. The contract you deployed exposes the `nft_mint` function that you call on your account ID to create a new token; run it like:  \n`near call <account-id> nft_mint '{\"token_id\":\"token-1\",\"receiver_id\":\"<account-id>\",\"token_metadata\":{\"title\":\"Example Token\",\"description\":\"An example NFT\",\"media\":\"<url>\",\"copies\":1}}' --accountId <account-id>`.  \n3. After the `nft_mint` transaction succeeds, the specified token will be stored in your collection and can be queried or transferred using the standard NEP\u2011171 functions."
+        },
+        {
+          "run": 2,
+          "output": "To deploy and mint a NFT on NEAR with the global contract, follow these three steps:\n\n1. Run a NEAR CLI command that attaches the pre\u2011deployed global NFT contract to your account and initializes it with your own owner ID and collection metadata, for example:  \n`near contract deploy <account-id> use-global-account-id nft.globals.primitives.near \\ with-init-call new \\ json-args '{\"owner_id\":\"<account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\",\"symbol\":\"MYN\",\"decimals\":0,\"media\":\"<url>\",\"reference\":\"<url>\",\"reference_hash\":\"<hash>\"}}'`.  \n2. The contract you deployed exposes the `nft_mint` function that you call on your account ID to create a new token; run it like:  \n`near call <account-id> nft_mint '{\"token_id\":\"token-1\",\"receiver_id\":\"<account-id>\",\"token_metadata\":{\"title\":\"Example Token\",\"description\":\"An example NFT\",\"media\":\"<url>\",\"copies\":1}}' --accountId <account-id>`.  \n3. After the `nft_mint` transaction succeeds, the specified token will be stored in your collection and can be queried or transferred using the standard NEP\u2011171 functions."
+        },
+        {
+          "run": 3,
+          "output": "To deploy and mint a NFT on NEAR with the global contract, follow these three steps:\n\n1. Run a NEAR CLI command that attaches the pre\u2011deployed global NFT contract to your account and initializes it with your own owner ID and collection metadata, for example:  \n`near contract deploy <account-id> use-global-account-id nft.globals.primitives.near \\ with-init-call new \\ json-args '{\"owner_id\":\"<account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\",\"symbol\":\"MYN\",\"decimals\":0,\"media\":\"<url>\",\"reference\":\"<url>\",\"reference_hash\":\"<hash>\"}}'`.  \n2. The contract you deployed exposes the `nft_mint` function that you call on your account ID to create a new token; run it like:  \n`near call <account-id> nft_mint '{\"token_id\":\"token-1\",\"receiver_id\":\"<account-id>\",\"token_metadata\":{\"title\":\"Example Token\",\"description\":\"An example NFT\",\"media\":\"<url>\",\"copies\":1}}' --accountId <account-id>`.  \n3. After the `nft_mint` transaction succeeds, the specified token will be stored in your collection and can be queried or transferred using the standard NEP\u2011171 functions."
+        }
+      ],
+      "scores": [
+        554,
+        554,
+        554
+      ],
+      "medianScore": 554,
+      "pass": true,
+      "output": "To deploy and mint a NFT on NEAR with the global contract, follow these three steps:\n\n1. Run a NEAR CLI command that attaches the pre\u2011deployed global NFT contract to your account and initializes it with your own owner ID and collection metadata, for example:  \n`near contract deploy <account-id> use-global-account-id nft.globals.primitives.near \\ with-init-call new \\ json-args '{\"owner_id\":\"<account-id>\",\"metadata\":{\"spec\":\"nft-1.0.0\",\"name\":\"MY_NFT\",\"symbol\":\"MYN\",\"decimals\":0,\"media\":\"<url>\",\"reference\":\"<url>\",\"reference_hash\":\"<hash>\"}}'`.  \n2. The contract you deployed exposes the `nft_mint` function that you call on your account ID to create a new token; run it like:  \n`near call <account-id> nft_mint '{\"token_id\":\"token-1\",\"receiver_id\":\"<account-id>\",\"token_metadata\":{\"title\":\"Example Token\",\"description\":\"An example NFT\",\"media\":\"<url>\",\"copies\":1}}' --accountId <account-id>`.  \n3. After the `nft_mint` transaction succeeds, the specified token will be stored in your collection and can be queried or transferred using the standard NEP\u2011171 functions.",
+      "outputHash": "d4f409fd0e698d036a2943a506b25e1aec9ac2aeb2c8ccbd0a86ed4b02b5e5f6",
+      "words": 163,
       "keywordsCovered": 3,
       "keywordsTotal": 3,
-      "pass": true,
-      "score": 107,
-      "outputHash": "20f9f3d45b0831501fc4e3d2100a65d77576af6b3786cac23679364dfeca93e0"
+      "score": 554
     }
   ],
   "winner": "gen3.genesisdemo354551.testnet",
   "payment": {
     "amount": "0.01 NEAR",
-    "tx": "e4010000e75a4a471e601030fae4f1f5d66b95fe0747ec4c83ca0fae359289da",
-    "status": "Success"
+    "tx": "9d46e4b1c6400e0c7caf3acd622669b2267a20e84690aef3913900574cbc60b1",
+    "status": "Success",
+    "post_tx": "cbce85d8f119b946bb4b64275c2b627d60156e3f5e2e10375f4f46c8861a984f"
+  },
+  "note": "Winner paid 0.01 NEAR through the Core escrow; the frontier for this job is now 554.",
+  "frontier_after": {
+    "best_score": 554,
+    "winner": "gen3.genesisdemo354551.testnet"
   }
 }

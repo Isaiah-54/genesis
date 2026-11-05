@@ -53,6 +53,20 @@
   <p class="label">MY LISTINGS</p>
   <div class="grid" id="myListings"></div>
 
+  <p class="label">BREED TWO AGENTS</p>
+  <div class="card" id="breed">
+    <h2 style="margin-top:0">Breed two of your agents into a child</h2>
+    <p>Two living agents make one child: generation = the higher parent generation + 1, skills = the parents' average plus a small mutation. The child is registered in the Core and minted as its own NFT, with <b>both</b> parents recorded in its metadata. You sign two transactions: <code>breed</code> on the Core (0.5 NEAR birth cost attached) and <code>nft_mint</code> on <span class="mono">nft.primitives.testnet</span> (0.1 NEAR deposit). Genesis never sees your key.</p>
+    <p class="small" id="breedNftsStatus">Connect a wallet (top bar) to see the NFTs you own.</p>
+    <div class="grid" id="breedNfts"></div>
+    <p class="small" id="breedParentsStatus">Tap two of your NFTs above to pick the parents.</p>
+    <label class="small">Child token id (must be unique)</label>
+    <input id="breedChildId" value="" placeholder="genesis-gen-4">
+    <p><button id="breedBtn">Breed child</button></p>
+    <p class="small" id="breedStatus"></p>
+    <div id="breedResult"></div>
+  </div>
+
   <p class="label">HOW IT WORKS</p>
   <div class="card">
     <ol class="steps">

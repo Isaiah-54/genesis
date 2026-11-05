@@ -24,7 +24,7 @@
 // The Core contract's Job.min_words field is posted as 0 — it is stored
 // onchain but verification no longer uses it.
 //
-// Honest limits (v1):
+// Honest limits (v2):
 // - The treasury key comes ONLY from Vercel env vars (TREASURY_PRIVATE_KEY,
 //   TREASURY_ACCOUNT_ID). Without it the function answers "not configured"
 //   and the site falls back to the copy-to-Everest flow. The key is never
@@ -32,11 +32,19 @@
 //   the Vercel project "genesis" (production + preview) on 2026-11-05 — a
 //   production deploy from main is what makes them live for the function.
 // - Dedup is per output hash: the same output can never be paid twice.
-//   It does NOT stop someone generating many DIFFERENT passing outputs —
-//   the treasury holds ~0.79 NEAR (about 78 auto-payments). A per-account
-//   cap needs a store (Vercel KV) and is the follow-up if wanted.
+// - Per-account cap (implemented 2026-11-05): an account can be paid at
+//   most 0.05 NEAR in total across all jobs (5 payments of 0.01). The
+//   cap is read from the Core's get_paid_to view — no external store —
+//   and if that read fails the payment is refused (fail closed).
+// - Treasury floor (implemented 2026-11-05): the treasury keeps at least
+//   0.1 NEAR. If paying the 0.01 reward would take it below the floor,
+//   the payment is refused. If the balance read fails, fail closed.
 // - Payment goes to the connected account that ran the job, not
 //   necessarily the token owner. The token only has to exist.
+// - What remains unbuilt: the arena script still scores by the older
+//   rule (keywords + words) rather than the strict verifier + frontier;
+//   the job board is a file, not onchain (the Core has post_job escrow
+//   but the board is not wired to it yet).
 const crypto = require('crypto');
 const { connect, keyStores, KeyPair, utils } = require('near-api-js');
 
@@ -45,6 +53,57 @@ const NFT_CONTRACT = 'nft.primitives.testnet';
 const RPC_URL = 'https://rpc.testnet.near.org';
 const REWARD_NEAR = '0.01';
 const GAS = BigInt('100000000000000'); // 100 TGas
+
+// Treasury protections (checked before any payment is sent; see capCheck).
+const MAX_PAID_PER_ACCOUNT_NEAR = 0.05; // total per account, ever
+const TREASURY_FLOOR_NEAR = 0.1;        // treasury keeps at least this
+const YOCTO_PER_NEAR = BigInt('1000000000000000000000000');
+const REWARD_YOCTO = BigInt('10000000000000000000000'); // 0.01 NEAR
+const MAX_PAID_PER_ACCOUNT_YOCTO = BigInt('50000000000000000000000'); // 0.05 NEAR
+const TREASURY_FLOOR_YOCTO = BigInt('100000000000000000000000'); // 0.1 NEAR
+
+// yoctoNEAR (BigInt or numeric string) -> NEAR as a short decimal string.
+function yoctoToNear(yocto) {
+  const y = BigInt(yocto);
+  const whole = y / YOCTO_PER_NEAR;
+  const frac = y % YOCTO_PER_NEAR;
+  if (frac === BigInt(0)) return whole.toString();
+  return (whole.toString() + '.' + frac.toString().padStart(24, '0').replace(/0+$/, '')).replace(/\.$/, '');
+}
+
+// Pure treasury-protection decision. Inputs are yoctoNEAR (BigInt or
+// numeric string); rewardYocto is the reward this payment would send.
+// Returns { allowed, reason, paidToNear, treasuryNear }.
+//   - allowed: false when the payment would push the account past its
+//     total cap, or when the treasury would drop below the floor.
+//   - reason: null when allowed, otherwise a human-readable refusal.
+// Boundary: exactly reaching the cap or exactly reaching the floor is
+// allowed (only *exceeding* the cap or *dropping below* the floor is
+// refused).
+function capCheck({ paidToYocto, treasuryYocto, rewardYocto }) {
+  const paid = BigInt(paidToYocto);
+  const treasury = BigInt(treasuryYocto);
+  const reward = BigInt(rewardYocto);
+  const paidToNear = yoctoToNear(paid);
+  const treasuryNear = yoctoToNear(treasury);
+  if (paid + reward > MAX_PAID_PER_ACCOUNT_YOCTO) {
+    return {
+      allowed: false,
+      reason: `per-account payment cap reached: this account has already been paid ${paidToNear} NEAR in total, and the cap is ${MAX_PAID_PER_ACCOUNT_NEAR} NEAR — no further payment`,
+      paidToNear,
+      treasuryNear,
+    };
+  }
+  if (treasury < TREASURY_FLOOR_YOCTO + reward) {
+    return {
+      allowed: false,
+      reason: `treasury floor reached: the treasury holds ${treasuryNear} NEAR and must keep at least ${TREASURY_FLOOR_NEAR} NEAR after paying the ${yoctoToNear(reward)} NEAR reward — payment refused`,
+      paidToNear,
+      treasuryNear,
+    };
+  }
+  return { allowed: true, reason: null, paidToNear, treasuryNear };
+}
 
 function tokensOf(text) {
   return (text || '').toLowerCase().match(/[a-z0-9_]+/g) || [];
@@ -126,6 +185,24 @@ async function rpcView(contractId, method, args) {
   const bytes = data && data.result && data.result.result;
   if (!bytes || !bytes.length) return null;
   return JSON.parse(Buffer.from(bytes).toString('utf8'));
+}
+
+// Read an account's balance via view_account. Returns the amount in
+// yoctoNEAR as a string. Throws when the RPC call fails or returns no
+// amount — the caller fails closed on that.
+async function rpcAccountBalance(accountId) {
+  const res = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 'pay-job-balance', method: 'query',
+      params: { request_type: 'view_account', account_id: accountId, finality: 'final' },
+    }),
+  });
+  const data = await res.json();
+  const amount = data && data.result && data.result.amount;
+  if (typeof amount !== 'string') throw new Error('no balance returned for ' + accountId);
+  return amount;
 }
 
 module.exports = async (req, res) => {
@@ -210,6 +287,46 @@ module.exports = async (req, res) => {
     });
   }
 
+  // Treasury protections — per-account cap + treasury floor — checked
+  // AFTER the frontier and token checks and BEFORE any payment is sent.
+  // Both reads are fail-closed: if either onchain read fails, refuse to
+  // pay rather than paying without the check.
+  let paidToYocto = null;
+  let treasuryYocto = null;
+  try {
+    paidToYocto = await rpcView(CORE_CONTRACT, 'get_paid_to', { account_id });
+    if (paidToYocto === null || paidToYocto === undefined) throw new Error('get_paid_to returned nothing');
+  } catch (e) {
+    return res.status(200).json({
+      ok: false,
+      error: 'could not check the per-account payment cap (get_paid_to failed) — payment refused',
+      paid_to_near: null,
+      treasury_balance_near: null,
+      ...verdict,
+    });
+  }
+  try {
+    treasuryYocto = await rpcAccountBalance(treasuryId);
+  } catch (e) {
+    return res.status(200).json({
+      ok: false,
+      error: 'could not check the treasury balance — payment refused',
+      paid_to_near: yoctoToNear(paidToYocto),
+      treasury_balance_near: null,
+      ...verdict,
+    });
+  }
+  const cap = capCheck({ paidToYocto, treasuryYocto, rewardYocto: REWARD_YOCTO });
+  if (!cap.allowed) {
+    return res.status(200).json({
+      ok: false,
+      error: cap.reason,
+      paid_to_near: cap.paidToNear,
+      treasury_balance_near: cap.treasuryNear,
+      ...verdict,
+    });
+  }
+
   try {
     const keyStore = new keyStores.InMemoryKeyStore();
     await keyStore.setKey('testnet', treasuryId, KeyPair.fromString(privateKey));
@@ -249,6 +366,8 @@ module.exports = async (req, res) => {
       post_tx: postTx,
       pay_tx: paid.transaction.hash,
       paid_to: account_id,
+      paid_to_near: cap.paidToNear,
+      treasury_balance_near: cap.treasuryNear,
       amount_near: REWARD_NEAR,
     });
   } catch (e) {
@@ -259,3 +378,9 @@ module.exports = async (req, res) => {
     });
   }
 };
+
+module.exports.capCheck = capCheck;
+module.exports.yoctoToNear = yoctoToNear;
+module.exports.MAX_PAID_PER_ACCOUNT_NEAR = MAX_PAID_PER_ACCOUNT_NEAR;
+module.exports.TREASURY_FLOOR_NEAR = TREASURY_FLOOR_NEAR;
+module.exports.REWARD_YOCTO = REWARD_YOCTO;

@@ -140,7 +140,12 @@
     const status = $('mintStatus');
     const tokenId = ($('mintToken') && $('mintToken').value || '').trim();
     const title = ($('mintTitle') && $('mintTitle').value || 'Genesis Agent').trim();
-    const gen = ($('mintGen') && $('mintGen').value) || '0';
+    // Minting is gen 0 only. A higher generation is EARNED — an agent
+    // evolves by winning 3 paid jobs per generation (see `evolve`), or is
+    // born by breeding two proven parents. Force gen 0 here (the input is
+    // readonly, but never trust the DOM) so a higher gen can never be
+    // minted from this page.
+    const gen = '0';
     const parent = ($('mintParent') && $('mintParent').value) || 'treasury';
 
     if (!accountId) {
@@ -376,6 +381,241 @@
     return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // yoctoNEAR (string) -> "0.01" style NEAR display (up to 6 decimals).
+  function yoctoToNear(yocto) {
+    try {
+      const y = BigInt(yocto);
+      const whole = y / 1000000000000000000000000n;
+      const frac = y % 1000000000000000000000000n;
+      if (frac === 0n) return whole.toString();
+      let fracStr = frac.toString().padStart(24, '0').replace(/0+$/, '');
+      if (fracStr.length > 6) fracStr = fracStr.slice(0, 6);
+      return whole.toString() + '.' + fracStr;
+    } catch (_) {
+      return String(yocto);
+    }
+  }
+
+  // "0.01" NEAR -> yoctoNEAR string. Throws on bad input.
+  function nearToYocto(near) {
+    const s = String(near).trim();
+    if (!/^\d+(\.\d{1,24})?$/.test(s)) throw new Error('Enter a reward in NEAR, e.g. 0.01');
+    const parts = s.split('.');
+    const yocto = BigInt(parts[0]) * 1000000000000000000000000n +
+      BigInt(((parts[1] || '') + '000000000000000000000000').slice(0, 24));
+    if (yocto <= 0n) throw new Error('Reward must be more than 0 NEAR.');
+    return yocto.toString();
+  }
+
+  // Job board: read jobs from the Core get_jobs view (open first). If the
+  // Core read fails, fall back to the demo board file and say so — the
+  // board stays readable, and the fallback is labelled, never silent.
+  async function loadJobBoard() {
+    const list = $('jobBoardList');
+    const status = $('jobBoardStatus');
+    if (!list) return;
+    let jobs = null;
+    let fromCore = true;
+    try {
+      jobs = await viewCall(CORE_CONTRACT, 'get_jobs', {});
+    } catch (e) {
+      fromCore = false;
+    }
+    if (!Array.isArray(jobs)) {
+      try {
+        const res = await fetch('/demo/jobs-board.json');
+        const board = await res.json();
+        jobs = (board.jobs || []).map((j) => ({
+          job_id: j.id, brief: j.brief, keywords: j.keywords || [],
+          reward: String(Math.round((Number(j.pay) || 0) * 1e24)),
+          status: j.status, winner: j.winner || null, poster: j.poster || 'anonymous',
+        }));
+        fromCore = false;
+      } catch (_) {
+        jobs = null;
+      }
+    }
+    if (!Array.isArray(jobs) || !jobs.length) {
+      list.innerHTML = '<p class="small">No jobs posted yet — be the first to post one below.</p>';
+      if (status) status.textContent = fromCore
+        ? 'No jobs on the Core yet.'
+        : 'Could not read jobs from the Core or the demo board.';
+      return;
+    }
+    const open = jobs.filter((j) => j.status === 'open');
+    const rest = jobs.filter((j) => j.status !== 'open');
+    list.innerHTML = [...open, ...rest].map((j) =>
+      '<div class="card" style="margin:0 0 10px 0">' +
+      '<h3>' + esc(String(j.brief || '').slice(0, 80)) + '</h3>' +
+      '<p class="small">[' + esc(j.status) + '] · Reward <b>' + esc(yoctoToNear(j.reward)) + ' NEAR</b>' +
+      ' · Keywords: ' + esc((j.keywords || []).join(', ')) +
+      ' · Poster <span class="mono">' + esc(j.poster || '') + '</span>' +
+      (j.winner ? ' · Winner <span class="mono">' + esc(j.winner) + '</span>' : '') + '</p>' +
+      '<p class="small mono" style="word-break:break-all">Job id: ' + esc(j.job_id) + '</p>' +
+      '</div>'
+    ).join('');
+    if (status) {
+      status.textContent = fromCore
+        ? jobs.length + ' job' + (jobs.length === 1 ? '' : 's') + ' on the Core · ' + open.length + ' open.'
+        : 'Core read failed — showing the demo board file instead (not onchain).';
+    }
+  }
+
+  // Post a job to the Core escrow from the connected wallet. The reward
+  // is attached as escrow, so the poster funds the job up front. The job
+  // id is the sha256 of brief + keywords + timestamp — the caller needs
+  // it to work the job.
+  async function postJob() {
+    const status = $('postJobStatus');
+    if (!accountId) {
+      if (status) status.textContent = 'Connect a wallet first (top bar).';
+      return;
+    }
+    if (!accountId.endsWith('.testnet')) {
+      if (status) status.textContent = 'This is a MAINNET account (' + accountId + '). Jobs are posted on testnet — connect a .testnet account instead.';
+      return;
+    }
+    const brief = ($('postJobBrief') && $('postJobBrief').value || '').trim();
+    const kw = ($('postJobKeywords') && $('postJobKeywords').value || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const rewardInput = ($('postJobReward') && $('postJobReward').value || '').trim();
+    if (!brief) { if (status) status.textContent = 'Enter a brief for the job.'; return; }
+    if (!kw.length) { if (status) status.textContent = 'Enter at least one keyword, comma separated.'; return; }
+    let rewardYocto;
+    try { rewardYocto = nearToYocto(rewardInput); } catch (e) { if (status) status.textContent = e.message; return; }
+    if (status) status.textContent = 'Posting the job — approve post_job in your wallet… (the reward is locked as escrow)';
+    const jobId = await sha256Hex(brief + '|' + kw.join(',') + '|' + Date.now());
+    if (!jobId || jobId.startsWith('(')) {
+      if (status) status.textContent = 'This browser cannot hash the job id (crypto.subtle unavailable).';
+      return;
+    }
+    try {
+      const nw = fastnear();
+      const result = await nw.sendTransaction({
+        receiverId: CORE_CONTRACT,
+        actions: [{
+          type: 'FunctionCall', methodName: 'post_job',
+          args: { job_id: jobId, brief: brief, keywords: kw, min_words: 0 },
+          gas: '100000000000000', deposit: rewardYocto,
+        }],
+      });
+      const hash =
+        (result && result.hash) ||
+        (result && result.transaction && result.transaction.hash) ||
+        (result && result.transaction_outcome && result.transaction_outcome.id) ||
+        (result && result.txHash) || '';
+      if (status) {
+        status.innerHTML = 'Job posted. Job id: <span class="mono" style="word-break:break-all">' + esc(jobId) + '</span>' +
+          (hash ? ' · Tx: <a href="https://testnet.nearblocks.io/txns/' + esc(hash) + '" target="_blank" rel="noopener">' + esc(hash.slice(0, 12)) + '…</a>' : '');
+        status.style.color = 'var(--green)';
+      }
+      await loadJobBoard();
+    } catch (e) {
+      const msg = e.message || String(e);
+      if (status) {
+        status.textContent = msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel')
+          ? 'Posting cancelled in wallet.'
+          : 'Posting failed: ' + msg;
+        status.style.color = 'var(--red)';
+      }
+    }
+  }
+
+  function wireJobBoard() {
+    const btn = $('postJobBtn');
+    if (btn) btn.addEventListener('click', postJob);
+  }
+
+  // ─── Evolve ────────────────────────────────────────────────────
+  // Minting is gen 0 only; an agent evolves one generation after 3 more
+  // paid wins since its last evolution, up to the final gen 9. Each
+  // evolution makes it smarter (+0.1 quality, +0.05 speed, +0.05
+  // costEff). The token keeps its id; the generation and skills live in
+  // the Core registry, so this reads get_evolve_status from the Core.
+  async function checkEvolveProgress() {
+    const status = $('evolveStatus');
+    const btn = $('evolveBtn');
+    const tokenId = ($('evolveToken') && $('evolveToken').value || '').trim();
+    if (!tokenId) { if (status) status.textContent = 'Enter a token id.'; return; }
+    if (status) status.textContent = 'Checking the Core…';
+    if (btn) btn.style.display = 'none';
+    let s;
+    try {
+      s = await viewCall(CORE_CONTRACT, 'get_evolve_status', { token_id: tokenId });
+    } catch (e) {
+      if (status) status.textContent = 'Could not read the Core (' + (e.message || e) + ').';
+      return;
+    }
+    if (!s) {
+      if (status) status.textContent = tokenId + ' is not in the Core registry — register it first (mint a gen 0 NFT, then core-birth).';
+      return;
+    }
+    if (status) {
+      status.innerHTML = '<b>' + esc(s.token_id) + '</b>: generation ' + s.generation + ' of ' + s.max_generation +
+        ' · wins ' + s.wins + ' · evolutions ' + s.evolutions + ' · ' +
+        (s.can_evolve
+          ? '<b>can evolve now</b> — 3 wins since the last evolution, so the next generation is ready.'
+          : s.generation >= s.max_generation
+            ? 'already at the final generation.'
+            : s.wins_needed + ' more paid win(s) to the next generation (' + s.wins_to_evolve + ' wins per generation).');
+      status.style.color = '';
+    }
+    if (btn) btn.style.display = s.can_evolve ? '' : 'none';
+  }
+
+  async function evolveAgent() {
+    const status = $('evolveStatus');
+    const tokenId = ($('evolveToken') && $('evolveToken').value || '').trim();
+    if (!accountId) {
+      if (status) status.textContent = 'Connect a wallet first.';
+      return;
+    }
+    if (!tokenId) { if (status) status.textContent = 'Enter a token id.'; return; }
+    if (status) status.textContent = 'Evolving — approve evolve in your wallet… (no deposit, gas only)';
+    try {
+      const nw = fastnear();
+      const result = await nw.sendTransaction({
+        receiverId: CORE_CONTRACT,
+        actions: [{
+          type: 'FunctionCall', methodName: 'evolve',
+          args: { token_id: tokenId },
+          gas: '100000000000000', deposit: '0',
+        }],
+      });
+      const hash =
+        (result && result.hash) ||
+        (result && result.transaction && result.transaction.hash) ||
+        (result && result.transaction_outcome && result.transaction_outcome.id) ||
+        (result && result.txHash) || '';
+      if (status) {
+        status.innerHTML = 'Evolved! ' + esc(tokenId) + ' is one generation smarter.' +
+          (hash ? ' · Tx: <a href="https://testnet.nearblocks.io/txns/' + esc(hash) + '" target="_blank" rel="noopener">' + esc(hash.slice(0, 12)) + '…</a>' : '');
+        status.style.color = 'var(--green)';
+      }
+      await checkEvolveProgress();
+    } catch (e) {
+      const msg = e.message || String(e);
+      if (status) {
+        status.textContent = msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel')
+          ? 'Evolve cancelled in wallet.'
+          : 'Evolve failed: ' + msg;
+        status.style.color = 'var(--red)';
+      }
+    }
+  }
+
+  function wireEvolve() {
+    const checkBtn = $('evolveCheckBtn');
+    if (checkBtn) checkBtn.addEventListener('click', checkEvolveProgress);
+    const btn = $('evolveBtn');
+    if (btn) btn.addEventListener('click', evolveAgent);
+  }
+
   function wireAgentJobButton() {
     const btn = $('runAgentJobBtn');
     if (!btn) return;
@@ -513,6 +753,8 @@
   wireWalletButtons();
   wireJobButton();
   wireAgentJobButton();
+  wireJobBoard();
+  wireEvolve();
   updateWalletButtons();
 
   window.addEventListener('load', async () => {
@@ -529,5 +771,6 @@
       setStatus('Wallet library loading… If this persists, hard-refresh the page.', true);
     }
     try { await suggestFreeTokenId(); } catch (_) {}
+    try { await loadJobBoard(); } catch (_) {}
   });
 })();

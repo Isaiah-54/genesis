@@ -27,6 +27,19 @@ use near_sdk::{
 pub const NFT_CONTRACT: &str = "nft.primitives.testnet";
 /// Marketplace fee, in basis points (500 = 5%), paid to the Core owner.
 pub const MARKETPLACE_FEE_BPS: u128 = 500;
+/// Paid jobs (wins) needed to evolve one generation. Same for every
+/// generation, so the path is simple and predictable: 3 wins per gen,
+/// 27 wins from gen 0 to the final gen 9.
+pub const WINS_TO_EVOLVE: u32 = 3;
+/// The final generation. Gen 9 is the last designed card (gen 0–9 exist,
+/// gen-x is for 10+). An agent at gen 9 cannot evolve further.
+pub const MAX_GENERATION: u32 = 9;
+/// Skill boost per evolution (gen 1 is smarter than gen 0, gen 2 smarter
+/// than gen 1, and so on). Capped at 2.0 per skill.
+pub const EVOLVE_QUALITY_BOOST: f32 = 0.1;
+pub const EVOLVE_SPEED_BOOST: f32 = 0.05;
+pub const EVOLVE_COST_EFF_BOOST: f32 = 0.05;
+pub const MAX_SKILL: f32 = 2.0;
 
 /// Simple skill set that mutates on birth.
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
@@ -61,15 +74,42 @@ pub struct Agent {
     pub owner_id: AccountId,
     pub generation: u32,
     pub parent: Option<String>,
+    /// Second parent, set only by two-parent breeding (`breed`). Single
+    /// parent births (Gen 0, parent-funded) leave this None. The primary
+    /// parent stays in `parent`, so existing readers keep working.
+    pub second_parent: Option<String>,
     pub skill: Skill,
     pub status: AgentStatus,
     pub jobs_done: u32,
     pub consecutive_fails: u32,
+    /// Paid jobs this agent has won (incremented in `pay_job` when the
+    /// winner is this agent's owner). Wins are the currency of evolution:
+    /// 3 wins since the last evolution earns the next generation.
+    pub wins: u32,
+    /// How many times this agent has evolved. The next evolution needs
+    /// (evolutions + 1) * WINS_TO_EVOLVE total wins.
+    pub evolutions: u32,
     // U128 has no JsonSchema impl in near-sdk 5.30; it serialises as a
     // string in JSON, so declare the schema as String for the ABI.
     #[schemars(with = "String")]
     pub earned: U128,          // yoctoNEAR
     pub created_at: u64,       // block timestamp
+}
+
+/// Evolution progress for one agent, returned by `get_evolve_status`.
+/// A win is a paid job; 3 wins since the last evolution earns the next
+/// generation, up to the final gen 9.
+#[derive(Clone, Debug, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct EvolveStatus {
+    pub token_id: String,
+    pub generation: u32,
+    pub wins: u32,
+    pub evolutions: u32,
+    pub wins_needed: u32,
+    pub can_evolve: bool,
+    pub max_generation: u32,
+    pub wins_to_evolve: u32,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
@@ -170,6 +210,54 @@ impl Contract {
         self.listings.values().collect()
     }
 
+    /// Every job ever posted (open, paid, cancelled). The onchain job
+    /// board reads this; the payment service reads it through
+    /// `get_paid_to` for the per-account cap. No pagination yet — the
+    /// job count is small; add from_index/limit if it ever grows large.
+    pub fn get_jobs(&self) -> Vec<Job> {
+        self.jobs.values().collect()
+    }
+
+    /// Total yoctoNEAR ever paid to one account across all paid jobs.
+    /// The payment service enforces the per-account cap from this (no
+    /// external store needed — the Core is the source of truth). A job
+    /// counts once it is "paid"; open or cancelled jobs do not count.
+    pub fn get_paid_to(&self, account_id: AccountId) -> U128 {
+        let total: u128 = self
+            .jobs
+            .values()
+            .filter(|j| j.status == "paid" && j.winner.as_ref() == Some(&account_id))
+            .map(|j| j.reward.0)
+            .sum();
+        U128(total)
+    }
+
+    /// Evolution progress for one agent: how many wins it has, how many
+    /// it needs for the next generation, and whether it can evolve now.
+    /// A win is a paid job (recorded in `pay_job`). The next evolution
+    /// needs (evolutions + 1) * WINS_TO_EVOLVE total wins — 3 wins since
+    /// the last evolution. Gen 9 is the final generation and cannot evolve.
+    pub fn get_evolve_status(&self, token_id: String) -> Option<EvolveStatus> {
+        let agent = self.agents.get(&token_id)?;
+        let wins_needed = if agent.generation >= MAX_GENERATION {
+            0
+        } else {
+            ((agent.evolutions + 1) * WINS_TO_EVOLVE).saturating_sub(agent.wins)
+        };
+        Some(EvolveStatus {
+            token_id: agent.token_id,
+            generation: agent.generation,
+            wins: agent.wins,
+            evolutions: agent.evolutions,
+            wins_needed,
+            can_evolve: agent.status == AgentStatus::Alive
+                && agent.generation < MAX_GENERATION
+                && wins_needed == 0,
+            max_generation: MAX_GENERATION,
+            wins_to_evolve: WINS_TO_EVOLVE,
+        })
+    }
+
     // ─── Birth ───────────────────────────────────────────────
 
     /// Register a new agent. Caller must attach at least birth_cost.
@@ -199,12 +287,112 @@ impl Contract {
             owner_id,
             generation,
             parent,
+            second_parent: None,
             skill: skill.unwrap_or_default(),
             status: AgentStatus::Alive,
             jobs_done: 0,
             consecutive_fails: 0,
+            wins: 0,
+            evolutions: 0,
             earned: U128(0),
             created_at: env::block_timestamp(),
+        };
+        self.agents.insert(&token_id, &agent);
+    }
+
+    /// Two-parent breeding: breed two proven (registered, alive) agents
+    /// into a child that combines their skills.
+    ///
+    /// - Both parents must exist in the registry and be alive. A dead
+    ///   agent cannot breed.
+    /// - The child generation is max(parent generations) + 1.
+    /// - Each child skill is the average of the two parents' skills plus
+    ///   a small mutation (derived from the block timestamp, clamped to
+    ///   0.5–2.0), so the child is a mix of both parents, not a copy of
+    ///   either one.
+    /// - The caller attaches the birth cost (same as `birth`); the child
+    ///   is registered with parent = parent1 and second_parent = parent2.
+    ///   The child NFT itself is minted separately (the CLI/site mint
+    ///   records both parents in the token metadata `extra`).
+    #[payable]
+    pub fn breed(
+        &mut self,
+        token_id: String,
+        owner_id: AccountId,
+        parent1: String,
+        parent2: String,
+    ) {
+        assert!(self.agents.get(&token_id).is_none(), "Agent already exists");
+        let p1 = self.agents.get(&parent1).expect("Parent 1 not registered");
+        let p2 = self.agents.get(&parent2).expect("Parent 2 not registered");
+        assert!(p1.status == AgentStatus::Alive, "Parent 1 is not alive");
+        assert!(p2.status == AgentStatus::Alive, "Parent 2 is not alive");
+        let deposit = env::attached_deposit();
+        assert!(
+            deposit.as_yoctonear() >= self.birth_cost.0,
+            "Must attach at least birth_cost"
+        );
+        let generation = std::cmp::max(p1.generation, p2.generation) + 1;
+        // Small mutation from the block timestamp: a pseudo-random delta
+        // in [-0.05, +0.14] per skill, so the child varies slightly from
+        // the plain average of its parents.
+        let t = env::block_timestamp();
+        let delta = |shift: u64| -> f32 {
+            (((t >> shift) % 20) as f32) / 100.0 - 0.05
+        };
+        let mix = |a: f32, b: f32, shift: u64| -> f32 {
+            ((a + b) / 2.0 + delta(shift)).clamp(0.5, 2.0)
+        };
+        let skill = Skill {
+            speed: mix(p1.skill.speed, p2.skill.speed, 0),
+            quality: mix(p1.skill.quality, p2.skill.quality, 5),
+            cost_eff: mix(p1.skill.cost_eff, p2.skill.cost_eff, 10),
+        };
+        let agent = Agent {
+            token_id: token_id.clone(),
+            owner_id,
+            generation,
+            parent: Some(parent1),
+            second_parent: Some(parent2),
+            skill,
+            status: AgentStatus::Alive,
+            jobs_done: 0,
+            consecutive_fails: 0,
+            wins: 0,
+            evolutions: 0,
+            earned: U128(0),
+            created_at: env::block_timestamp(),
+        };
+        self.agents.insert(&token_id, &agent);
+    }
+
+    /// Evolve one generation by winning. Minting is gen 0 only — a higher
+    /// generation is EARNED, never bought. An agent evolves when it has
+    /// WINS_TO_EVOLVE (3) more paid wins since its last evolution, up to
+    /// the final gen 9. Each evolution makes the agent smarter: quality
+    /// +0.1, speed +0.05, cost_eff +0.05 (each capped at 2.0), so gen 1 is
+    /// smarter than gen 0, gen 2 smarter than gen 1, and so on. The token
+    /// keeps its id (the NFT is the birth card); the generation and skills
+    /// live in this registry, and the site/CV/marketplace read them from
+    /// here, so they always show the current generation.
+    pub fn evolve(&mut self, token_id: String) {
+        let mut agent = self.agents.get(&token_id).expect("Agent not found");
+        assert_eq!(agent.status, AgentStatus::Alive, "Agent is not alive");
+        assert!(
+            agent.generation < MAX_GENERATION,
+            "Agent is already at the final generation"
+        );
+        let wins_needed = (agent.evolutions + 1) * WINS_TO_EVOLVE;
+        assert!(
+            agent.wins >= wins_needed,
+            "Agent needs more wins to evolve"
+        );
+        agent.generation += 1;
+        agent.evolutions += 1;
+        agent.skill = Skill {
+            speed: (agent.skill.speed + EVOLVE_SPEED_BOOST).min(MAX_SKILL),
+            quality: (agent.skill.quality + EVOLVE_QUALITY_BOOST).min(MAX_SKILL),
+            cost_eff: (agent.skill.cost_eff + EVOLVE_COST_EFF_BOOST).min(MAX_SKILL),
         };
         self.agents.insert(&token_id, &agent);
     }
@@ -272,8 +460,33 @@ impl Contract {
         job.winner = Some(winner.clone());
         self.jobs.insert(&job_id, &job);
 
+        // Record the win on the winner's agent (if the winner is a
+        // registered agent). A paid job is a completed job, so jobs_done
+        // rises too. Wins are the currency of evolution: 3 wins since the
+        // last evolution earns the next generation. The lookup is a linear
+        // scan over agents (the registry is small); a reverse owner→token
+        // map is the scalable fix if the registry ever grows large.
+        if let Some(token_id) = self.agent_token_for_owner(&winner) {
+            if let Some(mut agent) = self.agents.get(&token_id) {
+                agent.wins += 1;
+                agent.jobs_done += 1;
+                agent.earned = U128(agent.earned.0 + job.reward.0);
+                self.agents.insert(&token_id, &agent);
+            }
+        }
+
         // Transfer the escrowed reward
         Promise::new(winner).transfer(NearToken::from_yoctonear(job.reward.0));
+    }
+
+    /// Find a registered agent's token by its owner account. Returns None
+    /// when the account owns no registered agent (e.g. a human wallet
+    /// that won a job). Linear scan — fine at this registry size.
+    fn agent_token_for_owner(&self, owner: &AccountId) -> Option<String> {
+        self.agents
+            .iter()
+            .find(|(_, a)| &a.owner_id == owner)
+            .map(|(token_id, _)| token_id)
     }
 
     // ─── Marketplace (escrow) ────────────────────────────────────
@@ -478,43 +691,97 @@ impl Contract {
         self.min_jobs_to_reproduce = min_jobs_to_reproduce;
     }
 
-    // ─── Migration (v1 → v2) ─────────────────────────────────────
+    // ─── Migration (v2.1 → v2.2) ─────────────────────────────────────
 
-    /// Upgrade the deployed v1 contract to v2 in place, on the same account.
-    /// Reads the v1 state (agents, jobs, params), writes the v2 state with
-    /// empty frontiers and listings. MUST be the first call after the new
-    /// code is deployed — any other method would try to read v2 state from
-    /// v1 bytes and fail. Anyone can call it; it only rewrites the state
-    /// into the new shape and keeps every agent, job and parameter.
+    /// Migrate the v2.1 state to v2.2 (evolution). The only shape change
+    /// is `Agent.wins` and `Agent.evolutions`, so every existing agent is
+    /// carried over with wins 0 and evolutions 0 (the live agents have
+    /// not won any Core-paid jobs yet under v2.1 — their paid jobs predate
+    /// win tracking, so they start at 0 and earn wins from here on).
+    /// Frontiers, listings, jobs and params are PRESERVED. The agents map
+    /// moves to a fresh prefix (b"B") for the same reason as the v2.1
+    /// migrate: the value type changed again, and reusing the old prefix
+    /// (b"A") makes insert panic with "Index out of bounds". MUST be the
+    /// first call after the new code is deployed.
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        let old: OldContract = env::state_read().expect("v1 state not found");
+        let old: OldContractV2_1 = env::state_read().expect("v2.1 state not found");
+        // Collect first: inserting into the new agents map while iterating
+        // the old one would mutate the trie mid-iteration.
+        let converted: Vec<(String, Agent)> = old
+            .agents
+            .iter()
+            .map(|(token_id, a)| {
+                (
+                    token_id.clone(),
+                    Agent {
+                        token_id: a.token_id,
+                        owner_id: a.owner_id,
+                        generation: a.generation,
+                        parent: a.parent,
+                        second_parent: a.second_parent,
+                        skill: a.skill,
+                        status: a.status,
+                        jobs_done: a.jobs_done,
+                        consecutive_fails: a.consecutive_fails,
+                        wins: 0,
+                        evolutions: 0,
+                        earned: a.earned,
+                        created_at: a.created_at,
+                    },
+                )
+            })
+            .collect();
+        let mut agents = UnorderedMap::new(b"B");
+        for (token_id, agent) in converted {
+            agents.insert(&token_id, &agent);
+        }
         Self {
             owner_id: old.owner_id,
             treasury: old.treasury,
-            agents: old.agents,
+            agents,
             jobs: old.jobs,
             birth_cost: old.birth_cost,
             profit_threshold: old.profit_threshold,
             max_consecutive_fails: old.max_consecutive_fails,
             min_jobs_to_reproduce: old.min_jobs_to_reproduce,
-            frontiers: UnorderedMap::new(b"f"),
-            listings: UnorderedMap::new(b"l"),
+            frontiers: old.frontiers,
+            listings: old.listings,
         }
     }
 }
 
-/// The v1 contract state, exactly as deployed. Only used by `migrate()`.
+/// The v2.1 agent state, exactly as deployed (has `second_parent`, no
+/// `wins`/`evolutions`). Only used by `migrate()` to read the old agents
+/// and convert them.
 #[derive(BorshDeserialize, BorshSerialize)]
-pub struct OldContract {
+pub struct OldAgentV2 {
+    pub token_id: String,
+    pub owner_id: AccountId,
+    pub generation: u32,
+    pub parent: Option<String>,
+    pub second_parent: Option<String>,
+    pub skill: Skill,
+    pub status: AgentStatus,
+    pub jobs_done: u32,
+    pub consecutive_fails: u32,
+    pub earned: U128,
+    pub created_at: u64,
+}
+
+/// The v2.1 contract state, exactly as deployed. Only used by `migrate()`.
+#[derive(BorshDeserialize, BorshSerialize)]
+pub struct OldContractV2_1 {
     pub owner_id: AccountId,
     pub treasury: AccountId,
-    pub agents: UnorderedMap<String, Agent>,
+    pub agents: UnorderedMap<String, OldAgentV2>,
     pub jobs: UnorderedMap<String, Job>,
     pub birth_cost: U128,
     pub profit_threshold: U128,
     pub max_consecutive_fails: u32,
     pub min_jobs_to_reproduce: u32,
+    pub frontiers: UnorderedMap<String, Frontier>,
+    pub listings: UnorderedMap<String, Listing>,
 }
 
 #[cfg(test)]
@@ -569,25 +836,28 @@ mod tests {
     }
 
     #[test]
-    fn migrate_preserves_agents_and_jobs() {
+    fn migrate_preserves_agents_jobs_frontier_and_listings() {
         testing(owner());
-        let mut old = OldContract {
+        let mut old = OldContractV2_1 {
             owner_id: owner(),
             treasury: owner(),
-            agents: UnorderedMap::new(b"a"),
+            agents: UnorderedMap::new(b"A"),
             jobs: UnorderedMap::new(b"j"),
             birth_cost: U128(500_000_000_000_000_000_000_000),
             profit_threshold: U128(0),
             max_consecutive_fails: 3,
             min_jobs_to_reproduce: 3,
+            frontiers: UnorderedMap::new(b"f"),
+            listings: UnorderedMap::new(b"l"),
         };
         old.agents.insert(
             &"genesis-gen-2".to_string(),
-            &Agent {
+            &OldAgentV2 {
                 token_id: "genesis-gen-2".to_string(),
                 owner_id: owner(),
                 generation: 2,
                 parent: Some("genesis-gen-1".to_string()),
+                second_parent: Some("genesis-gen-0".to_string()),
                 skill: Skill::default(),
                 status: AgentStatus::Alive,
                 jobs_done: 1,
@@ -609,14 +879,39 @@ mod tests {
                 winner: None,
             },
         );
+        // A live frontier and a live listing must survive the migrate —
+        // the v1 migrate reset them because v1 had none; v2 does, and
+        // wiping the frontier would reset the difficulty bar to zero.
+        old.frontiers.insert(
+            &"def1".to_string(),
+            &Frontier {
+                best_score: 483,
+                best_output_hash: "h1".to_string(),
+                winner: owner(),
+            },
+        );
+        old.listings.insert(
+            &"genesis-weak-2".to_string(),
+            &Listing {
+                token_id: "genesis-weak-2".to_string(),
+                seller: owner(),
+                price: U128(1_000_000_000_000_000_000_000),
+                listed_at: 0,
+            },
+        );
         env::state_write(&old);
         let new = Contract::migrate();
         assert_eq!(new.agent_count(), 1);
-        assert!(new.get_agent("genesis-gen-2".to_string()).is_some());
+        let agent = new.get_agent("genesis-gen-2".to_string()).expect("agent kept");
+        assert_eq!(agent.parent, Some("genesis-gen-1".to_string()));
+        assert_eq!(agent.second_parent, Some("genesis-gen-0".to_string()));
+        assert_eq!(agent.wins, 0);
+        assert_eq!(agent.evolutions, 0);
         assert!(new.get_job("job1".to_string()).is_some());
         assert_eq!(new.birth_cost.0, 500_000_000_000_000_000_000_000);
-        assert!(new.get_frontier("anything".to_string()).is_none());
-        assert!(new.get_listings().is_empty());
+        assert_eq!(new.get_frontier("def1".to_string()).unwrap().best_score, 483);
+        assert_eq!(new.get_listings().len(), 1);
+        assert_eq!(new.get_listing("genesis-weak-2".to_string()).unwrap().seller, owner());
     }
 
     #[test]
@@ -655,6 +950,289 @@ mod tests {
             c.get_frontier("def1".to_string()).unwrap().best_score,
             401
         );
+    }
+
+    #[test]
+    fn get_jobs_lists_every_job() {
+        testing(owner());
+        let mut c = empty_contract();
+        assert!(c.get_jobs().is_empty());
+        open_job(&mut c, "h1");
+        open_job(&mut c, "h2");
+        let jobs = c.get_jobs();
+        assert_eq!(jobs.len(), 2);
+        assert!(jobs.iter().any(|j| j.job_id == "h1" && j.status == "open"));
+        assert!(jobs.iter().any(|j| j.job_id == "h2" && j.status == "open"));
+        // A paid job still shows up (status "paid"), so the board can
+        // show history as well as open work.
+        c.pay_job("h1".to_string(), owner(), 400, "def1".to_string());
+        let jobs = c.get_jobs();
+        assert_eq!(jobs.len(), 2);
+        assert!(jobs.iter().any(|j| j.job_id == "h1" && j.status == "paid"));
+    }
+
+    #[test]
+    fn get_paid_to_sums_only_paid_jobs_for_that_winner() {
+        testing(owner());
+        let mut c = empty_contract();
+        let other: AccountId = "gen2.genesisdemo354551.testnet".parse().unwrap();
+        open_job(&mut c, "h1");
+        open_job(&mut c, "h2");
+        open_job(&mut c, "h3");
+        // Nothing paid yet: both accounts are at zero.
+        assert_eq!(c.get_paid_to(owner()).0, 0);
+        assert_eq!(c.get_paid_to(other.clone()).0, 0);
+        // Pay h1 to the owner (0.01 NEAR) and h2 to the other account.
+        c.pay_job("h1".to_string(), owner(), 400, "def1".to_string());
+        c.pay_job("h2".to_string(), other.clone(), 401, "def1".to_string());
+        // h3 is still open: it must not count for anyone.
+        assert_eq!(c.get_paid_to(owner()).0, 10_000_000_000_000_000_000_000);
+        assert_eq!(c.get_paid_to(other.clone()).0, 10_000_000_000_000_000_000_000);
+        assert_eq!(c.get_paid_to("nobody.testnet".parse().unwrap()).0, 0);
+    }
+
+    fn two_parents(c: &mut Contract) {
+        // Parent 1: gen 2, fast but lower quality. Parent 2: gen 3,
+        // slower but higher quality. The child should mix both.
+        c.birth(
+            "genesis-gen-2".to_string(),
+            owner(),
+            2,
+            Some("genesis-gen-1".to_string()),
+            Some(Skill { speed: 1.0, quality: 1.2, cost_eff: 0.8 }),
+        );
+        c.birth(
+            "genesis-gen-3".to_string(),
+            owner(),
+            3,
+            Some("genesis-gen-2".to_string()),
+            Some(Skill { speed: 1.4, quality: 1.0, cost_eff: 1.0 }),
+        );
+    }
+
+    #[test]
+    fn breed_creates_a_child_with_both_parents_and_mixed_skills() {
+        testing(owner());
+        let mut c = empty_contract();
+        two_parents(&mut c);
+        c.breed(
+            "genesis-gen-4".to_string(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "genesis-gen-3".to_string(),
+        );
+        let child = c.get_agent("genesis-gen-4".to_string()).expect("child bred");
+        // Generation is max(parent generations) + 1.
+        assert_eq!(child.generation, 4);
+        assert_eq!(child.parent, Some("genesis-gen-2".to_string()));
+        assert_eq!(child.second_parent, Some("genesis-gen-3".to_string()));
+        assert_eq!(child.status, AgentStatus::Alive);
+        assert_eq!(child.jobs_done, 0);
+        assert_eq!(child.earned.0, 0);
+        // Each skill is the average of the two parents plus a small
+        // mutation (delta in [-0.05, +0.14] per skill).
+        let avg = |a: f32, b: f32| (a + b) / 2.0;
+        for (child_skill, a, b) in [
+            (child.skill.speed, 1.0, 1.4),
+            (child.skill.quality, 1.2, 1.0),
+            (child.skill.cost_eff, 0.8, 1.0),
+        ] {
+            let m = avg(a, b);
+            assert!(child_skill >= m - 0.05 && child_skill <= m + 0.14, "skill {child_skill} outside [{:.2}, {:.2}]", m - 0.05, m + 0.14);
+            assert!((child_skill - a).abs() > 0.001 || (child_skill - b).abs() > 0.001, "child must not be an exact copy of one parent");
+        }
+        assert_eq!(c.agent_count(), 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "Parent 2 not registered")]
+    fn breed_rejects_an_unregistered_parent() {
+        testing(owner());
+        let mut c = empty_contract();
+        two_parents(&mut c);
+        c.breed(
+            "genesis-gen-4".to_string(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "genesis-missing".to_string(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "is not alive")]
+    fn breed_rejects_a_dead_parent() {
+        testing(owner());
+        let mut c = empty_contract();
+        two_parents(&mut c);
+        c.die("genesis-gen-3".to_string());
+        c.breed(
+            "genesis-gen-4".to_string(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "genesis-gen-3".to_string(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Agent already exists")]
+    fn breed_rejects_a_duplicate_token() {
+        testing(owner());
+        let mut c = empty_contract();
+        two_parents(&mut c);
+        c.breed(
+            "genesis-gen-3".to_string(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "genesis-gen-3".to_string(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Must attach at least birth_cost")]
+    fn breed_rejects_when_birth_cost_is_not_attached() {
+        testing(owner());
+        let mut c = empty_contract();
+        two_parents(&mut c);
+        // Set the birth cost after the parents are born (their births
+        // attached nothing, so they only work while the cost is 0).
+        c.birth_cost = U128(500_000_000_000_000_000_000_000);
+        c.breed(
+            "genesis-gen-4".to_string(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "genesis-gen-3".to_string(),
+        );
+    }
+
+    /// Pay the owner `n` jobs (each on its own job definition, so the
+    /// frontier never blocks). Returns the agent after the wins.
+    fn win_jobs(c: &mut Contract, n: u32, def_prefix: &str) {
+        for i in 0..n {
+            let job_id = format!("w{}{}", def_prefix, i);
+            open_job(c, &job_id);
+            c.pay_job(job_id, owner(), 400 + i, format!("{}{}", def_prefix, i));
+        }
+    }
+
+    #[test]
+    fn pay_job_records_a_win_on_the_winners_agent() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth("genesis-gen-0".to_string(), owner(), 0, None, None);
+        open_job(&mut c, "h1");
+        c.pay_job("h1".to_string(), owner(), 400, "def1".to_string());
+        let agent = c.get_agent("genesis-gen-0".to_string()).expect("agent");
+        assert_eq!(agent.wins, 1);
+        assert_eq!(agent.jobs_done, 1);
+        assert_eq!(agent.earned.0, 10_000_000_000_000_000_000_000);
+        assert_eq!(agent.evolutions, 0);
+    }
+
+    #[test]
+    fn pay_job_ignores_a_winner_who_is_not_a_registered_agent() {
+        testing(owner());
+        let mut c = empty_contract();
+        open_job(&mut c, "h1");
+        let stranger: AccountId = "nobody.testnet".parse().unwrap();
+        c.pay_job("h1".to_string(), stranger, 400, "def1".to_string());
+        assert_eq!(c.get_job("h1".to_string()).unwrap().status, "paid");
+        assert_eq!(c.agent_count(), 0);
+    }
+
+    #[test]
+    fn evolve_after_three_wins_raises_generation_and_skills() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth(
+            "genesis-gen-0".to_string(),
+            owner(),
+            0,
+            None,
+            Some(Skill { speed: 1.0, quality: 1.0, cost_eff: 1.0 }),
+        );
+        win_jobs(&mut c, 3, "a");
+        c.evolve("genesis-gen-0".to_string());
+        let agent = c.get_agent("genesis-gen-0".to_string()).expect("agent");
+        assert_eq!(agent.generation, 1);
+        assert_eq!(agent.evolutions, 1);
+        assert_eq!(agent.wins, 3);
+        // Gen 1 is smarter than gen 0: quality +0.1, speed +0.05,
+        // cost_eff +0.05.
+        assert!((agent.skill.quality - 1.1).abs() < 0.001);
+        assert!((agent.skill.speed - 1.05).abs() < 0.001);
+        assert!((agent.skill.cost_eff - 1.05).abs() < 0.001);
+    }
+
+    #[test]
+    #[should_panic(expected = "needs more wins")]
+    fn evolve_rejects_before_three_wins() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth("genesis-gen-0".to_string(), owner(), 0, None, None);
+        win_jobs(&mut c, 2, "a");
+        c.evolve("genesis-gen-0".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "already at the final generation")]
+    fn evolve_rejects_at_the_final_generation() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth("genesis-gen-9".to_string(), owner(), 9, None, None);
+        c.evolve("genesis-gen-9".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "is not alive")]
+    fn evolve_rejects_a_dead_agent() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth("genesis-gen-0".to_string(), owner(), 0, None, None);
+        win_jobs(&mut c, 3, "a");
+        c.die("genesis-gen-0".to_string());
+        c.evolve("genesis-gen-0".to_string());
+    }
+
+    #[test]
+    fn evolve_needs_three_more_wins_for_the_next_generation() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth("genesis-gen-0".to_string(), owner(), 0, None, None);
+        win_jobs(&mut c, 3, "a");
+        c.evolve("genesis-gen-0".to_string());
+        // 3 wins earned gen 1, but gen 2 needs 6 total wins.
+        let status = c.get_evolve_status("genesis-gen-0".to_string()).expect("status");
+        assert_eq!(status.generation, 1);
+        assert_eq!(status.wins_needed, 3);
+        assert!(!status.can_evolve);
+        win_jobs(&mut c, 3, "b");
+        c.evolve("genesis-gen-0".to_string());
+        let agent = c.get_agent("genesis-gen-0".to_string()).expect("agent");
+        assert_eq!(agent.generation, 2);
+        assert_eq!(agent.evolutions, 2);
+        assert_eq!(agent.wins, 6);
+        // Gen 2 is smarter than gen 1.
+        assert!((agent.skill.quality - 1.2).abs() < 0.001);
+    }
+
+    #[test]
+    fn get_evolve_status_reports_wins_needed() {
+        testing(owner());
+        let mut c = empty_contract();
+        c.birth("genesis-gen-0".to_string(), owner(), 0, None, None);
+        let status = c.get_evolve_status("genesis-gen-0".to_string()).expect("status");
+        assert_eq!(status.wins, 0);
+        assert_eq!(status.wins_needed, 3);
+        assert!(!status.can_evolve);
+        assert_eq!(status.max_generation, 9);
+        win_jobs(&mut c, 1, "a");
+        let status = c.get_evolve_status("genesis-gen-0".to_string()).expect("status");
+        assert_eq!(status.wins_needed, 2);
+        win_jobs(&mut c, 2, "b");
+        let status = c.get_evolve_status("genesis-gen-0".to_string()).expect("status");
+        assert_eq!(status.wins_needed, 0);
+        assert!(status.can_evolve);
+        assert!(c.get_evolve_status("genesis-missing".to_string()).is_none());
     }
 
     #[test]
