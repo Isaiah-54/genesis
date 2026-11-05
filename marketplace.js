@@ -34,8 +34,10 @@
   const GAS_BUY = '200000000000000'; // 200 TGas (cross-contract transfer + callback)
   const GAS_DELIST = '200000000000000'; // 200 TGas (returns the NFT)
   const GAS_TRANSFER_CALL = '300000000000000'; // 300 TGas (like nft_mint)
+  const OWNER_PAGE = 50; // tokens per nft_tokens_for_owner page
 
   let accountId = null;
+  let selectedTokenId = null; // the token picked by tapping one of your NFT cards
 
   function $(id) { return document.getElementById(id); }
 
@@ -152,6 +154,100 @@
     return m ? 'cv.html#gen' + m[1] : 'cv.html';
   }
 
+  // Every NFT the account owns on the shared contract, in pages of 50.
+  // NEP-171 enumeration: nft_tokens_for_owner({account_id, from_index, limit}).
+  // A token that is listed is owned by the Core, so it never shows up here —
+  // this is exactly the list of tokens the wallet can still list.
+  async function nftTokensForOwner(ownerId) {
+    const all = [];
+    let fromIndex = 0;
+    for (let page = 0; page < 3; page++) {
+      const batch = await rpcView(NFT_CONTRACT, 'nft_tokens_for_owner', {
+        account_id: ownerId, from_index: String(fromIndex), limit: OWNER_PAGE,
+      });
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      all.push.apply(all, batch);
+      if (batch.length < OWNER_PAGE) break;
+      fromIndex += batch.length;
+    }
+    return all;
+  }
+
+  function myNftCard(token) {
+    const gen = genFromToken(token);
+    const title = (token && token.metadata && token.metadata.title) || token.token_id;
+    const selected = selectedTokenId === token.token_id;
+    return '<div class="card pick' + (selected ? ' selected' : '') + '" style="margin:0" data-pick-token="' + esc(token.token_id) + '" role="button" tabindex="0">' +
+      '<img src="' + esc(genCardUrl(gen)) + '" alt="Genesis generation ' + gen + ' card" style="width:100%;border-radius:12px;margin-bottom:10px">' +
+      '<h3>' + esc(token.token_id) + '</h3>' +
+      '<p class="small">Generation ' + gen + ' · ' + esc(title) + '</p>' +
+      '<p><span class="tag pick-tag">' + (selected ? 'SELECTED — tap again to unpick' : 'Tap to list this one') + '</span></p>' +
+      '</div>';
+  }
+
+  // Tap a card: it becomes the token to list (no need to remember the id).
+  // Tapping the selected card again unpicks it. The manual input below
+  // stays editable as a fallback — typing there clears the card selection.
+  function selectToken(tokenId) {
+    selectedTokenId = (selectedTokenId === tokenId) ? null : tokenId;
+    const input = $('listTokenId');
+    if (input) input.value = selectedTokenId || '';
+    const grid = $('myNfts');
+    if (grid) {
+      grid.querySelectorAll('[data-pick-token]').forEach(function (el) {
+        const picked = el.getAttribute('data-pick-token') === selectedTokenId;
+        el.classList.toggle('selected', picked);
+        const tag = el.querySelector('.pick-tag');
+        if (tag) tag.textContent = picked ? 'SELECTED — tap again to unpick' : 'Tap to list this one';
+      });
+    }
+    if (selectedTokenId) {
+      const price = $('listPrice');
+      if (price) price.focus();
+    }
+  }
+
+  async function loadMyNfts() {
+    const grid = $('myNfts');
+    const status = $('myNftsStatus');
+    if (!grid) return;
+    if (!accountId) {
+      grid.innerHTML = '';
+      if (status) status.textContent = 'Connect a wallet (top bar) to see the NFTs you own.';
+      return;
+    }
+    if (status) status.textContent = 'Loading the NFTs this wallet owns…';
+    let tokens;
+    try {
+      tokens = await nftTokensForOwner(accountId);
+    } catch (e) {
+      // Enumeration is a convenience: if the contract does not answer,
+      // the manual token id below still works.
+      grid.innerHTML = '';
+      if (status) status.textContent = 'Could not detect this wallet\u2019s NFTs (' + (e.message || e) + ') — type the token id below instead.';
+      return;
+    }
+    if (!tokens.length) {
+      grid.innerHTML = '';
+      if (status) {
+        status.innerHTML = 'This wallet owns no agent NFTs yet — <a href="index.html#mint">mint one first</a>.';
+      }
+      return;
+    }
+    if (status) {
+      status.textContent = tokens.length === 1
+        ? 'This wallet owns 1 agent NFT — tap it to list it.'
+        : 'This wallet owns ' + tokens.length + ' agent NFTs — tap the one you want to list.';
+    }
+    // Keep a previous selection if that token is still owned.
+    if (selectedTokenId && !tokens.some(function (t) { return t.token_id === selectedTokenId; })) {
+      selectedTokenId = null;
+      const input = $('listTokenId');
+      if (input) input.value = '';
+    }
+    grid.innerHTML = tokens.map(myNftCard).join('');
+  }
+
   function txHash(result) {
     return (result && result.hash) ||
       (result && result.transaction && result.transaction.hash) ||
@@ -263,6 +359,7 @@
       });
       setStatus('Purchase submitted. The NFT and payment settle through the Core escrow.' + txLink(txHash(result)), false, true);
       await loadListings();
+      await loadMyNfts(); // ownership changed: the bought NFT is now yours
     } catch (e) {
       const msg = e.message || String(e);
       setStatus(txFailed(msg) || ('Purchase failed: ' + msg), true);
@@ -283,6 +380,7 @@
       });
       setStatus('Delist submitted. The NFT returns to you.' + txLink(txHash(result)), false, true);
       await loadListings();
+      await loadMyNfts(); // ownership changed: the NFT is yours again
     } catch (e) {
       const msg = e.message || String(e);
       setStatus(txFailed(msg) || ('Delist failed: ' + msg), true);
@@ -317,7 +415,11 @@
       });
       setStatus('Listing submitted. ' + tokenId + ' is on the market for ' +
         yoctoToNear(priceYocto) + ' NEAR.' + txLink(txHash(result)), false, true);
+      selectedTokenId = null;
+      const input = $('listTokenId');
+      if (input) input.value = '';
       await loadListings();
+      await loadMyNfts(); // ownership changed: the listed NFT is now in escrow
     } catch (e) {
       const msg = e.message || String(e);
       setStatus(txFailed(msg) || ('Listing failed: ' + msg +
@@ -328,6 +430,39 @@
   function wireButtons() {
     const btn = $('listNftBtn');
     if (btn) btn.addEventListener('click', listNft);
+    // Typing a token id by hand clears the card selection, so the input
+    // and the picked card never disagree.
+    const tokenInput = $('listTokenId');
+    if (tokenInput) {
+      tokenInput.addEventListener('input', function () {
+        if (selectedTokenId && tokenInput.value.trim() !== selectedTokenId) {
+          selectedTokenId = null;
+          const grid = $('myNfts');
+          if (grid) {
+            grid.querySelectorAll('[data-pick-token]').forEach(function (el) {
+              el.classList.remove('selected');
+              const tag = el.querySelector('.pick-tag');
+              if (tag) tag.textContent = 'Tap to list this one';
+            });
+          }
+        }
+      });
+    }
+    const myGrid = $('myNfts');
+    if (myGrid) {
+      myGrid.addEventListener('click', function (ev) {
+        const target = ev.target && ev.target.closest ? ev.target.closest('[data-pick-token]') : null;
+        if (!target) return;
+        selectToken(target.getAttribute('data-pick-token'));
+      });
+      myGrid.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        const target = ev.target && ev.target.closest ? ev.target.closest('[data-pick-token]') : null;
+        if (!target) return;
+        ev.preventDefault();
+        selectToken(target.getAttribute('data-pick-token'));
+      });
+    }
     [$('marketListings'), $('myListings')].forEach(function (container) {
       if (!container) return;
       container.addEventListener('click', function (ev) {
@@ -350,6 +485,7 @@
       accountId = id || currentAccountId(nw);
     } catch (_) {}
     await loadListings();
+    await loadMyNfts();
   }
 
   window.addEventListener('load', init);

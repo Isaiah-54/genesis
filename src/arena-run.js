@@ -7,15 +7,15 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const { KeyPair, transactions, utils, InMemorySigner } = require('near-api-js');
-const { verify } = require('./engine');
+const { verifyStrict } = require('./engine');
 const { workLLM } = require('./worker-llm');
 const { postJob, scoreOutput, pickWinner } = require('./jobs-board');
 const MASTER = 'genesisdemo354551.testnet';
 // Payment goes through src/cli.js pay, the proven curl-broadcast path.
 (async () => {
-  const job = postJob({ brief: 'NEAR NFTs global contract mint', keywords: ['near', 'nft', 'mint'], minWords: 20, pay: '0.01', poster: MASTER });
+  const job = postJob({ brief: 'NEAR NFTs global contract mint', keywords: ['near', 'nft', 'mint'], pay: '0.01', poster: MASTER });
   const page = execSync(`curl -s -m 30 https://docs.near.org/primitives/nft/nft | perl -0777 -pe 's/<script.*?<\\/script>//gs; s/<style.*?<\\/style>//gs' | sed -e 's/<[^>]*>/ /g' | tr -s ' \\n' ' '`, { maxBuffer: 4 * 1024 * 1024 }).toString();
-  const jobInput = { brief: job.brief, minWords: job.minWords, keywords: job.keywords, text: page.slice(0, 3000) };
+  const jobInput = { brief: job.brief, keywords: job.keywords, text: page.slice(0, 3000) };
   const entries = [];
   // Different angles per contestant: without them the same model returns
   // the same output twice (proven in arena run 1 — identical hashes), and
@@ -27,7 +27,7 @@ const MASTER = 'genesisdemo354551.testnet';
   for (const c of contestants) {
     const agent = c.agent;
     const llm = await workLLM({ ...jobInput, angle: c.angle }, { skill: { speed: 1, quality: 1, costEff: 1, language: 'en' } });
-    const s = scoreOutput(jobInput, llm.output, verify);
+    const s = scoreOutput(jobInput, llm.output, verifyStrict);
     entries.push({ agent, worker: llm.worker, model: llm.model, output: llm.output, ...s });
     console.log(agent, '->', llm.worker, s.pass ? 'PASS' : 'FAIL', s.words, 'words,', s.keywordsCovered + '/' + s.keywordsTotal, 'keywords, score', s.score.toFixed(2));
   }

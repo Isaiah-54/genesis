@@ -106,6 +106,13 @@ button.ghost { background: var(--card2); color: var(--text); border: 1px solid v
 }
 .tag.win { color: var(--green); border-color: #1e4d33; }
 .tag.loss { color: var(--red); border-color: #4d1e24; }
+/* Selectable NFT card (marketplace "list your NFT" picker). Tapping a
+   card picks that token to list, so the owner never has to remember
+   its id. */
+.pick { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.pick:hover { border-color: var(--gold); }
+.pick.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+.pick.selected .tag.pick-tag { color: var(--gold); border-color: var(--gold); }
 .arena-board {
   display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: stretch;
 }

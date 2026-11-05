@@ -21,13 +21,12 @@ function save(b) {
   fs.writeFileSync(BOARD, JSON.stringify(b, null, 2));
 }
 
-function postJob({ brief, keywords = [], minWords = 20, pay = 0.01, poster = 'anonymous' }) {
+function postJob({ brief, keywords = [], pay = 0.01, poster = 'anonymous' }) {
   const b = load();
   const job = {
     id: 'job-' + Date.now(),
     brief,
     keywords,
-    minWords,
     pay,
     poster,
     status: 'open',
@@ -57,13 +56,25 @@ function closeJob(jobId, winner = null) {
 
 function scoreOutput(job, output, verifyFn) {
   const v = verifyFn(job, output);
-  const keywordScore = job.keywords?.length
-    ? (v.keywordsCovered / v.keywordsTotal) * 100
-    : 50;
-  const lengthScore = Math.min(v.words, 200) / 200 * 10;
+  // verifyStrict returns { pass, score, gates } with no flat words /
+  // keywordsCovered fields; the legacy verify returns the flat fields and
+  // no score. Normalise both so arena callers keep working, and never
+  // recompute the score from the legacy formula when verifyStrict already
+  // supplied the labinius score (the old formula reads undefined fields
+  // and produces NaN).
+  const words = v.gates?.originality?.totalWords ?? v.words ?? 0;
+  const keywordsCovered = v.gates?.coverage?.covered ?? v.keywordsCovered ?? 0;
+  const keywordsTotal = v.gates?.coverage?.total ?? v.keywordsTotal ?? (job.keywords || []).length;
+  const score = typeof v.score === 'number'
+    ? v.score
+    : +(((job.keywords?.length ? (keywordsCovered / keywordsTotal) * 100 : 50)
+      + Math.min(words, 200) / 200 * 10).toFixed(2));
   return {
     ...v,
-    score: +(keywordScore + lengthScore).toFixed(2),
+    words,
+    keywordsCovered,
+    keywordsTotal,
+    score,
     outputHash: crypto.createHash('sha256').update(output || '').digest('hex'),
   };
 }

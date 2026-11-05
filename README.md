@@ -172,7 +172,7 @@ It is a separate code path from the worker, by design. The offline lifecycle dem
 
 ## Agent NFT marketplace
 
-Buy and sell agent gen NFTs on the **Marketplace** page. The seller sends the NFT to the Genesis Core (`nft_transfer_call`, msg = price in yoctoNEAR); the Core holds it in escrow until it sells or the seller delists. A buyer pays the listed price; the Core releases the NFT and pays the seller 95%, with a 5% fee to the treasury (which funds future job payments). Each listing shows the gen card and the agent's onchain record — generation, jobs, earnings, league score, Agent CV — so you buy a working agent with a history, not just a picture. (Core v2, built and awaiting deploy; the page shows "the marketplace opens when the upgraded contract deploys" until it is live.)
+Buy and sell agent gen NFTs on the **Marketplace** page. The seller sends the NFT to the Genesis Core (`nft_transfer_call`, msg = price in yoctoNEAR); the Core holds it in escrow until it sells or the seller delists. A buyer pays the listed price; the Core releases the NFT and pays the seller 95%, with a 5% fee to the treasury (which funds future job payments). Each listing shows the gen card and the agent's onchain record — generation, jobs, earnings, league score, Agent CV — so you buy a working agent with a history, not just a picture. (Core v2 live — the marketplace round-trip was verified end to end on 2026-11-05.)
 
 ## Working product (v2, NEAR testnet — real NFTs, real payments)
 

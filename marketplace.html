@@ -40,7 +40,9 @@
   <div class="card">
     <h2 style="margin-top:0">List your agent NFT</h2>
     <p>Listing sends the NFT to the Core escrow. It stays there until it sells or you delist it. You must own the token, and you sign <code>nft_transfer_call</code> on <span class="mono">nft.primitives.testnet</span>. Genesis never sees your key.</p>
-    <label class="small">Token id</label>
+    <p class="small" id="myNftsStatus">Connect a wallet (top bar) to see the NFTs you own.</p>
+    <div class="grid" id="myNfts"></div>
+    <label class="small">Token id — tap one of your NFTs above, or type it here</label>
     <input id="listTokenId" value="" placeholder="genesis-gen-3">
     <label class="small">Price (testnet NEAR)</label>
     <input id="listPrice" value="" placeholder="0.5" inputmode="decimal">
