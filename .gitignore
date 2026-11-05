@@ -8,3 +8,4 @@ target/
 build-core-local.log
 
 .testnet-core-account.json
+.testnet-faucet-relay.json

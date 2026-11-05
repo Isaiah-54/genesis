@@ -36,6 +36,14 @@ The testnet refill is the **free NEAR testnet faucet**
 Treasury target: 1.2 NEAR (one breed + one more action). One action
 needs 0.6 NEAR.
 
+**Fallback when near-faucet.io is down:** the testnet helper
+faucet (`helper.testnet.near.org`) funds a NEW account with 10
+testnet NEAR. `scripts/faucet-relay-refill.js` creates one such
+relay account once (key in `.testnet-faucet-relay.json`, chmod 600,
+gitignored) and transfers testnet NEAR from it to the treasury —
+nothing from the owner's accounts. The relay keeps its remaining
+balance for future refills.
+
 `scripts/treasury-sweep.js` reports the state and whether a refill
 is due. It exits 1 when the treasury is below target, so a cron can
 alert on it. The faucet claim itself is a browser form fill — the
@@ -69,8 +77,18 @@ and says exactly what is missing.
 
 ## State (2026-11-05)
 
-- Treasury `genesisdemo354551.testnet`: 0.2015 NEAR — below the
-  1.2 NEAR target, refill due (2 NEAR faucet claim in progress).
+- Treasury `genesisdemo354551.testnet`: **2.2015 NEAR** (verified
+  live 2026-11-05 ~20:25 WAT) — refilled via the helper-faucet relay
+  (see below); covers 3 actions at 0.6 NEAR each.
+- Relay `genesisrelay370982.testnet`: 8 NEAR kept for future refills
+  (created 2026-11-05 via the helper faucet with 10 NEAR, 2 sent to
+  the treasury, tx `HCQZvgagdaqujnrs5E6dgPh5ZYciA8zfrNK42RJt1sgk`).
+  Key only in `.testnet-faucet-relay.json` (chmod 600, gitignored).
+- near-faucet.io is DOWN as of 2026-11-05: 5 failed claims that day
+  (2 in the morning, 3 in the evening including after a reload),
+  every one ending in the same generic server-side "ERROR — There
+  was an error", no captcha, no rate-limit message. Retry it later;
+  the relay is the working fallback meanwhile.
 - Treasury testnet USDC: 0.07 (includes 0.05 from the visitor-4
   mint via the 402 rail and 0.01 premium) — accounting only, no swap
   route.
