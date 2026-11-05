@@ -2,6 +2,16 @@
 // funds, no live RPC calls. The live behaviour (402 without payment,
 // onchain verification of a real ft_transfer) is documented in
 // docs/X402.md; these tests pin the route's logic.
+//
+// The payments log is pointed at a temp file so the tests never pollute
+// the real demo/x402-payments.json (an earlier run recorded a fake hash
+// there and then failed its own dedup check on re-run).
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const TMP_LOG = path.join(os.tmpdir(), 'x402-test-payments-' + process.pid + '.json');
+fs.writeFileSync(TMP_LOG, JSON.stringify({ payments: [] }));
+process.env.X402_PAYMENTS_LOG = TMP_LOG;
 const handler = require('../api/agent-premium');
 const { USDC_CONTRACT, TREASURY_ACCOUNT } = require('../api/agent-premium')._test;
 
@@ -162,5 +172,22 @@ const TX5 = 'e'.repeat(64);
   console.log('9. bad token id:', r.status, JSON.stringify(r.payload).slice(0, 200));
   if (r.status !== 400) fail('bad token id was not 400');
 
+  // 10. Base58 tx hash (as shown on Nearblocks) -> 200, canonicalised
+  // to hex in paidWith. This is the real payment hash from the live
+  // end-to-end test: base58 9eAGcsjorP2MViC5bKXFfXRhFi6SJai3A7oE1fMRSku
+  // == hex 0236a9c81bce0ea5af79057b57863d67a41526cbaa8b144c785741619bceb7b6.
+  const B58_TX = '9eAGcsjorP2MViC5bKXFfXRhFi6SJai3A7oE1fMRSku';
+  const HEX_TX = '0236a9c81bce0ea5af79057b57863d67a41526cbaa8b144c785741619bceb7b6';
+  r = await call({ token_id: 'genesis-gen-3', paymentTx: B58_TX, paymentSender: 'buyer.testnet' }, mockFetch('good'));
+  console.log('10. base58 tx hash:', r.status, JSON.stringify(r.payload).slice(0, 200));
+  if (r.status !== 200) fail('base58 tx hash was not 200: ' + JSON.stringify(r.payload));
+  if (r.payload.paidWith.txHash !== HEX_TX) fail('base58 hash was not canonicalised to hex: ' + r.payload.paidWith.txHash);
+
+  // 11. The same payment in hex form now dedups against the base58 one.
+  r = await call({ token_id: 'genesis-gen-3', paymentTx: HEX_TX, paymentSender: 'buyer.testnet' }, mockFetch('good'));
+  console.log('11. hex form of the same tx:', r.status, JSON.stringify(r.payload).slice(0, 200));
+  if (r.status !== 402) fail('hex form of an already-used base58 tx was not 402');
+
   console.log('ALL CHECKS PASSED');
+  try { fs.unlinkSync(TMP_LOG); } catch (_) {}
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

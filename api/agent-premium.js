@@ -59,7 +59,7 @@ const USDC_CONTRACT = '3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4
 const PRICE_USDC_SMALLEST = '10000'; // 0.01 USDC, 6 decimals
 const PRICE_DISPLAY = '0.01 testnet USDC';
 const NETWORK = 'near:testnet';
-const PAYMENTS_LOG = path.join(__dirname, '..', 'demo', 'x402-payments.json');
+const PAYMENTS_LOG = process.env.X402_PAYMENTS_LOG || path.join(__dirname, '..', 'demo', 'x402-payments.json');
 
 const B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
@@ -75,6 +75,35 @@ function hexToBase58(hex) {
   let pad = 0;
   for (const b of bytes) { if (b === 0) pad++; else break; }
   return '1'.repeat(pad) + (s || '');
+}
+
+// NEAR explorers and near-api-js show transaction hashes in base58
+// (44 chars, e.g. 9eAGcsjorP2MViC5bKXFfXRhFi6SJai3A7oE1fMRSku), while
+// the RPC `tx` method takes the hash either way — but this route
+// canonicalises on 64-hex internally. Accept both forms from the
+// caller so a hash copied straight from Nearblocks just works.
+function base58ToHex(b58) {
+  let n = 0n;
+  for (const c of b58) {
+    const i = B58_ALPHABET.indexOf(c);
+    if (i < 0) return null;
+    n = n * 58n + BigInt(i);
+  }
+  let hex = n.toString(16);
+  if (hex.length % 2) hex = '0' + hex;
+  let pad = 0;
+  for (const c of b58) { if (c === '1') pad++; else break; }
+  return '00'.repeat(pad) + hex.padStart(64 - pad * 2, '0');
+}
+
+function normaliseTxHash(input) {
+  const h = String(input || '').trim();
+  if (/^[0-9a-fA-F]{64}$/.test(h)) return h.toLowerCase();
+  if (/^[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(h)) {
+    const hex = base58ToHex(h);
+    if (hex && /^[0-9a-f]{64}$/.test(hex)) return hex;
+  }
+  return null;
 }
 
 function readPaymentsLog() {
@@ -161,9 +190,10 @@ async function rpcTx(txHashHex, sender, fetchImpl) {
 // The transaction must have succeeded and must contain an ft_transfer
 // on the testnet USDC contract sending >= PRICE_USDC_SMALLEST to the
 // treasury. The tx hash must not have been used before.
-async function verifyPayment(txHashHex, sender, fetchImpl) {
-  if (!/^[0-9a-fA-F]{64}$/.test(txHashHex || '')) {
-    return { valid: false, reason: 'paymentTx must be a 64-hex transaction hash' };
+async function verifyPayment(txHash, sender, fetchImpl) {
+  const txHashHex = normaliseTxHash(txHash);
+  if (!txHashHex) {
+    return { valid: false, reason: 'paymentTx must be a transaction hash (64-hex, or base58 as shown on Nearblocks)' };
   }
   if (typeof sender !== 'string' || !/^[a-z0-9._-]+\.testnet$/.test(sender)) {
     return { valid: false, reason: 'paymentSender must be a .testnet account id' };
@@ -194,7 +224,7 @@ async function verifyPayment(txHashHex, sender, fetchImpl) {
       args = JSON.parse(Buffer.from(String(fc.args || ''), 'base64').toString('utf8'));
     } catch (_) { continue; }
     if (args && args.receiver_id === TREASURY_ACCOUNT && BigInt(String(args.amount || '0')) >= BigInt(PRICE_USDC_SMALLEST)) {
-      return { valid: true, reason: null, amount: String(args.amount), sender: tx.signer_id };
+      return { valid: true, reason: null, amount: String(args.amount), sender: tx.signer_id, txHash: key };
     }
   }
   return { valid: false, reason: 'transaction does not contain an ft_transfer of >= ' + PRICE_DISPLAY + ' to ' + TREASURY_ACCOUNT };
@@ -248,9 +278,12 @@ module.exports = async (req, res) => {
     return paymentRequiredResponse(res, tokenId);
   }
   // Payment verified — record it (dedup) and serve the premium CV.
-  usedTxHashes.add(paymentTx.toLowerCase());
+  // Canonicalise on the 64-hex hash so a base58 hash and its hex form
+  // dedup against each other instead of paying twice for one tx.
+  const txHashHex = check.txHash || paymentTx.toLowerCase();
+  usedTxHashes.add(txHashHex);
   recordPayment({
-    token_id: tokenId, txHash: paymentTx.toLowerCase(),
+    token_id: tokenId, txHash: txHashHex,
     sender: check.sender || paymentSender, amount: check.amount,
     paidAt: new Date().toISOString(),
   });
@@ -267,7 +300,7 @@ module.exports = async (req, res) => {
     : [];
   const response = {
     x402Version: 2,
-    settlement: { txHash: paymentTx.toLowerCase(), sender: check.sender || paymentSender, amount: check.amount, asset: USDC_CONTRACT, network: NETWORK },
+    settlement: { txHash: txHashHex, sender: check.sender || paymentSender, amount: check.amount, asset: USDC_CONTRACT, network: NETWORK },
   };
   res.setHeader('PAYMENT-RESPONSE', Buffer.from(JSON.stringify(response)).toString('base64'));
   return res.status(200).json({
@@ -277,8 +310,8 @@ module.exports = async (req, res) => {
     agent,
     leagueStanding: standing || null,
     matches,
-    paidWith: { txHash: paymentTx.toLowerCase(), amount: check.amount, asset: USDC_CONTRACT, network: NETWORK },
+    paidWith: { txHash: txHashHex, amount: check.amount, asset: USDC_CONTRACT, network: NETWORK },
   });
 };
 
-module.exports._test = { hexToBase58, verifyPayment, paymentRequirements, USDC_CONTRACT, TREASURY_ACCOUNT, PRICE_USDC_SMALLEST };
+module.exports._test = { hexToBase58, base58ToHex, normaliseTxHash, verifyPayment, paymentRequirements, USDC_CONTRACT, TREASURY_ACCOUNT, PRICE_USDC_SMALLEST };
