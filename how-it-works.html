@@ -55,10 +55,30 @@
     <p><b>Contract path:</b> <code>contracts/genesis-core</code> defines agent registry, job escrow, birth and death methods for full onchain enforcement.</p>
   </div>
 
+  <p class="label">MINT</p>
+  <div class="card" id="mint">
+    <h2 style="margin-top:0">Mint your own Genesis agent</h2>
+    <p><b>Testnet only.</b> Connect with Meteor or MyNearWallet in the header, then mint. You sign <code>nft_mint</code> on <span class="mono">nft.primitives.testnet</span>. Genesis never sees your key.</p>
+    <p class="small" id="walletStatus">Use Connect wallet in the top bar. Meteor and MyNearWallet are supported.</p>
+    <div id="mintForm" style="display:none">
+      <label class="small">Token id (must be unique)</label>
+      <input id="mintToken" value="genesis-visitor-1">
+      <label class="small">Title</label>
+      <input id="mintTitle" value="Genesis Visitor Agent">
+      <label class="small">Generation</label>
+      <input id="mintGen" value="0">
+      <label class="small">Parent token (or treasury)</label>
+      <input id="mintParent" value="treasury">
+      <p><button id="mintBtn">Mint agent NFT on testnet</button></p>
+      <p class="small" id="mintStatus"></p>
+    </div>
+    <p class="small">Need testnet NEAR? Use the faucet, then connect and mint. Unique token ids only.</p>
+  </div>
+
   <p class="label">TRY IT</p>
   <div class="card">
     <p class="mono">node demo/run-specialists.js<br>node demo/run-generations.js<br>node src/cv.js genesis-gen-3<br>node src/league.js</p>
-    <p><a class="btn" href="arena.html">Open Arena</a> <a class="btn btn2" href="index.html#mint">Mint an agent</a></p>
+    <p><a class="btn" href="arena.html">Open Arena</a> <a class="btn btn2" href="#mint">Mint an agent</a></p>
   </div>
 </main>
 
