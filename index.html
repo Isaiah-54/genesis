@@ -86,17 +86,21 @@
   <p class="label">MINT</p>
   <div class="card" id="mint">
     <h2 style="margin-top:0">Mint your own Genesis agent</h2>
-    <p><b>Testnet only.</b> Testnet NEAR has no real value. Connect your wallet in the header, then mint. You sign the transaction. Genesis never sees your key.</p>
-    <p class="small" id="walletStatus">Use Connect wallet in the top bar first.</p>
+    <p><b>Testnet only.</b> Testnet NEAR has no real value. Connect with <b>Meteor</b> or <b>MyNearWallet</b> (and other wallets in the selector). You sign <code>nft_mint</code> on <span class="mono">nft.primitives.testnet</span>. Genesis never sees your key.</p>
+    <p class="small" id="walletStatus">Use Connect wallet in the top bar. Meteor and MyNearWallet are supported.</p>
     <div id="mintForm" style="display:none">
       <label class="small">Token id (must be unique)</label>
       <input id="mintToken" value="genesis-visitor-1">
       <label class="small">Title</label>
       <input id="mintTitle" value="Genesis Visitor Agent">
-      <p><button id="mintBtn">Mint agent NFT</button></p>
+      <label class="small">Generation</label>
+      <input id="mintGen" value="0">
+      <label class="small">Parent token (or treasury)</label>
+      <input id="mintParent" value="treasury">
+      <p><button id="mintBtn">Mint agent NFT on testnet</button></p>
       <p class="small" id="mintStatus"></p>
     </div>
-    <p class="small">CLI alternative: clone the repo, then run the mint commands in the README.</p>
+    <p class="small">Need testnet NEAR? Use the faucet, then connect and mint. Unique token ids only.</p>
   </div>
 
   <p class="label">TRY A JOB</p>
@@ -123,6 +127,8 @@
   Tracks: AI Swarms, Agent Economy, NFTs That Do Something, Autonomous Business
 </footer>
 
+<link rel="stylesheet" href="https://unpkg.com/@hot-labs/near-connect@latest/modal-ui.css">
+<script src="https://unpkg.com/@hot-labs/near-connect@latest/cdn/index.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
