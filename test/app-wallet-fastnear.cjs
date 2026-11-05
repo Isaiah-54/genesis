@@ -137,5 +137,13 @@ function fail(msg) { console.log('FAIL:', msg); process.exit(1); }
     '| status:', JSON.stringify(page2.$('mintStatus').textContent));
   if (calls.sendTransaction.length !== before) fail('duplicate token id reached the wallet');
   if (!page2.$('mintStatus').textContent.includes('already taken')) fail('no already-taken message');
+
+  // 6. A fresh page load auto-suggests a free token id when the filled-in
+  // one is taken (genesis-visitor-1 -> genesis-visitor-2).
+  const page3 = loadPage();
+  page3.$('mintToken').value = 'genesis-visitor-1';
+  await page3.windowListeners.load();
+  console.log('6. page 3 token field after load:', JSON.stringify(page3.$('mintToken').value));
+  if (page3.$('mintToken').value !== 'genesis-visitor-2') fail('form did not suggest a free token id');
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

@@ -91,6 +91,50 @@
     }
   }
 
+  // True if the token id already exists on the shared NFT contract,
+  // false if it is free, null if the check itself failed.
+  async function tokenExists(tokenId) {
+    try {
+      const check = await fetch('https://rpc.testnet.near.org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 'genesis-mint-check', method: 'query',
+          params: {
+            request_type: 'call_function', account_id: NFT_CONTRACT,
+            method_name: 'nft_token',
+            args_base64: btoa(JSON.stringify({ token_id: tokenId })),
+            finality: 'final',
+          },
+        }),
+      });
+      const data = await check.json();
+      const bytes = data && data.result && data.result.result;
+      if (!bytes || !bytes.length) return null;
+      return !!JSON.parse(new TextDecoder().decode(new Uint8Array(bytes)));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // The mint form always offers a free token id: if the filled-in id follows
+  // the genesis-visitor-N pattern and is already taken, walk up to the first
+  // free number and fill it in. Any wallet can then mint another gen-0 card
+  // — only the token id has to be unique, not the generation.
+  async function suggestFreeTokenId() {
+    const field = $('mintToken');
+    if (!field) return;
+    const m = (field.value || '').trim().match(/^genesis-visitor-(\d+)$/);
+    if (!m) return;
+    let n = parseInt(m[1], 10);
+    for (let i = 0; i < 20; i++) {
+      const exists = await tokenExists('genesis-visitor-' + n);
+      if (exists === false) { field.value = 'genesis-visitor-' + n; return; }
+      if (exists === null) return; // check failed — leave the field alone
+      n += 1;
+    }
+  }
+
   async function mintAgent() {
     const status = $('mintStatus');
     const tokenId = ($('mintToken') && $('mintToken').value || '').trim();
@@ -113,34 +157,16 @@
     // panic ("token_id must be unique"). Check first so the user never opens
     // the wallet for a mint that cannot succeed. If the check itself fails
     // (network error), proceed anyway — the contract still rejects duplicates.
-    try {
-      const check = await fetch('https://rpc.testnet.near.org', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0', id: 'genesis-mint-check', method: 'query',
-          params: {
-            request_type: 'call_function', account_id: NFT_CONTRACT,
-            method_name: 'nft_token',
-            args_base64: btoa(JSON.stringify({ token_id: tokenId })),
-            finality: 'final',
-          },
-        }),
-      });
-      const data = await check.json();
-      const bytes = data && data.result && data.result.result;
-      if (bytes && bytes.length) {
-        const existing = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes)));
-        if (existing) {
-          if (status) {
-            status.textContent = 'That token id is already taken — pick a new unique token id.';
-            status.style.color = 'var(--red)';
-          }
-          return;
-        }
+    // NOTE: uniqueness is per token id, NOT per generation — any number of
+    // gen-0 agents can exist, each with its own token id (genesis-gen-0 and
+    // genesis-visitor-1 are both gen 0, owned by different wallets).
+    if (await tokenExists(tokenId)) {
+      if (status) {
+        status.textContent = 'That token id is already taken — pick a new unique token id.';
+        status.style.color = 'var(--red)';
       }
-    } catch (_) {}
-
+      return;
+    }
     if (status) status.textContent = 'Approve the mint in your wallet…';
 
     const description =
@@ -360,5 +386,6 @@
       console.warn('FastNear restore:', e);
       setStatus('Wallet library loading… If this persists, hard-refresh the page.', true);
     }
+    try { await suggestFreeTokenId(); } catch (_) {}
   });
 })();
