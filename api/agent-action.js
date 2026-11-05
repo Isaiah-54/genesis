@@ -316,7 +316,7 @@ async function defaultExecutor(action, params, ctx) {
         token_id: params.token_id, receiver_id: mintReceiver,
         token_metadata: {
           title: params.title || 'Genesis Gen 0', description: 'Genesis agent — born, earns, reproduces, evolves',
-          media: 'https://genesis-roan-eta.vercel.app/nft/gen-0.svg',
+          media: 'https://genesis-roan-eta.vercel.app/api/nft-card?gen=0',
           extra: JSON.stringify({ generation: 0, parent: null, second_parent: null, skill: { speed: 1.0, quality: 1.0, cost_eff: 1.0 } }),
         },
       },
@@ -351,7 +351,7 @@ async function defaultExecutor(action, params, ctx) {
         token_id: params.token_id, receiver_id: breedReceiver,
         token_metadata: {
           title: `Genesis Gen ${child ? child.generation : '?'}`, description: 'Genesis agent — born of two parents, earns, reproduces, evolves',
-          media: `https://genesis-roan-eta.vercel.app/nft/gen-${child ? child.generation : 0}.svg`,
+          media: `https://genesis-roan-eta.vercel.app/api/nft-card?gen=${child ? child.generation : 0}`,
           extra: JSON.stringify({ generation: child ? child.generation : null, parent: params.parent1, second_parent: params.parent2, skill: child ? child.skill : null }),
         },
       },

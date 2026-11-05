@@ -172,7 +172,7 @@
 
   function genCardUrl(gen) {
     const n = parseInt(gen, 10);
-    return SITE + '/nft/gen-' + (Number.isInteger(n) && n >= 0 && n <= 9 ? n : 'x') + '.svg';
+    return SITE + '/api/nft-card?gen=' + (Number.isInteger(n) && n >= 0 && n <= 9 ? n : 'x');
   }
 
   // The CV page has anchors for the numbered generations (#gen2, #gen3).

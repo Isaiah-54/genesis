@@ -182,8 +182,8 @@
     // Each generation mints with its own card image (gen 0-9, gen-x above 9).
     const genNum = parseInt(gen, 10);
     const media = (Number.isInteger(genNum) && genNum >= 0 && genNum <= 9)
-      ? 'https://genesis-roan-eta.vercel.app/nft/gen-' + genNum + '.svg'
-      : 'https://genesis-roan-eta.vercel.app/nft/gen-x.svg';
+      ? 'https://genesis-roan-eta.vercel.app/api/nft-card?gen=' + genNum
+      : 'https://genesis-roan-eta.vercel.app/api/nft-card?gen=x';
 
     const tokenMetadata = {
       title: title,

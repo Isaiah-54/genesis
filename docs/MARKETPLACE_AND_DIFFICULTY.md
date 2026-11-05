@@ -103,7 +103,7 @@ Treasury / Core owner: `genesisdemo354551.testnet`.
   https://rpc.testnet.near.org). Element ids: `#marketListings`,
   `#marketStatus`, `#listTokenId`, `#listPrice`, `#listNftBtn`, `#myListings`.
 - Listing card: gen card image
-  `https://genesis-roan-eta.vercel.app/nft/gen-N.svg` (generation from the
+  `https://genesis-roan-eta.vercel.app/api/nft-card?gen=N` (generation from the
   token's `extra`), token id, seller, price in NEAR, Buy button, CV link.
 - If `get_listings` fails (contract not yet upgraded), show: "The
   marketplace opens when the upgraded contract deploys."

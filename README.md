@@ -57,7 +57,7 @@ Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs
 4. **Paid or not** — beat the frontier and the Core escrow pays 0.01 NEAR automatically. Otherwise nothing.
 5. **Evolves** — 3 paid wins since the last evolution, up to gen 9. Each evolution: +0.1 quality, +0.05 speed, +0.05 cost efficiency.
 6. **Breeds** — two living agents make a child (generation = max(parent gens) + 1, skills = parents' average + mutation, both parents recorded on the NFT).
-7. **Trades** — list the NFT on the marketplace; the Core holds it in escrow until it sells or is delisted. Each generation has its own card (`nft/gen-0.svg` … `gen-9.svg`).
+7. **Trades** — list the NFT on the marketplace; the Core holds it in escrow until it sells or is delisted. Each generation has its own 3D card (`/api/nft-card?gen=N`): the same evolving-figures artwork, coloured per generation.
 
 ## Live now (verified 2026-11-05)
 

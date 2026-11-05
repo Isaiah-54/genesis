@@ -1,3 +1,6 @@
+// SUPERSEDED by scripts/gen-nft-cards-3d.py (3D JPEG cards, 2026-11-05).
+// Kept for reference; the SVG cards in nft/ are no longer referenced by
+// any mint or display path.
 // Generate one distinct NFT card image (SVG) per Genesis generation.
 // Each generation gets its own hue, subtitle, and ring motif, so every
 // minted NFT carries a different card. Cards are served from the website
