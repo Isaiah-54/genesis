@@ -119,14 +119,19 @@ async function startServer() {
     assert.strictEqual(r.attestation.response.intel_quote, 'fake-intel-quote-response');
     console.log('2. preflight fails, response carries attestation: captured from the response: ok');
 
-    // 3. Without NEAR_AI_API_KEY the worker falls through to the existing
-    //    routes and does NOT claim verifiable:true. (Pointed at the local
-    //    server via the configured-endpoint route so the test stays fast
-    //    and does not depend on the public Pollinations API.)
+    // 3. Without NEAR_AI_API_KEY and without the connector helper the
+    //    worker falls through to the existing routes and does NOT claim
+    //    verifiable:true. (Pointed at the local server via the
+    //    configured-endpoint route so the test stays fast and does not
+    //    depend on the public Pollinations API. The connector is disabled
+    //    by pointing NEAR_AI_CONNECTOR_HELPER at a path that does not
+    //    exist, because on a machine where the connector IS installed
+    //    Route 0 would legitimately answer through it.)
     await setControl(controlBase, { attestationShouldFail: false, completionCarriesAttestation: false });
     delete process.env.NEAR_AI_API_KEY;
     delete process.env.NEAR_AI_MODEL;
     delete process.env.NEAR_AI_API_URL;
+    process.env.NEAR_AI_CONNECTOR_HELPER = path.join(__dirname, 'does-not-exist-near-ai-call.py');
     process.env.LLM_API_URL = base;
     process.env.LLM_API_KEY = 'sk-test-fake-key';
     process.env.LLM_MODEL = 'test-model';
@@ -135,9 +140,26 @@ async function startServer() {
     assert.strictEqual(r.verifiable, false);
     assert.strictEqual(r.provider, base);
     assert.strictEqual(r.output, FAKE_SUMMARY);
-    console.log('3. without NEAR_AI_API_KEY: falls through, does not claim verifiable:true: ok');
+    console.log('3. without NEAR_AI_API_KEY and without the connector: falls through, does not claim verifiable:true: ok');
 
-    console.log('worker-near-ai: all 4 scenarios pass');
+    // 4. Without NEAR_AI_API_KEY but WITH the connector helper installed,
+    //    Route 0 answers through the connector (the stub helper stands in
+    //    for the real near-ai-call.py, so no real API call is made) and
+    //    the result is verifiable:true from provider near-ai.
+    delete process.env.LLM_API_URL;
+    delete process.env.LLM_API_KEY;
+    delete process.env.LLM_MODEL;
+    process.env.NEAR_AI_CONNECTOR_HELPER = path.join(__dirname, 'near-ai-connector-stub.py');
+    r = await workLLM(JOB, AGENT);
+    assert.strictEqual(r.provider, 'near-ai');
+    assert.strictEqual(r.verifiable, true);
+    assert.strictEqual(r.model, 'z-ai/glm-5.3-flash');
+    assert.strictEqual(r.worker, 'llm');
+    assert.strictEqual(r.output, FAKE_SUMMARY);
+    assert.strictEqual(r.chat_id, 'stub-chat-id');
+    console.log('4. without NEAR_AI_API_KEY but with the connector helper: Route 0 answers through the connector, verifiable:true: ok');
+
+    console.log('worker-near-ai: all 5 scenarios pass');
   } finally {
     child.kill();
   }

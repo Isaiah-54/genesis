@@ -9,32 +9,51 @@ makes Genesis's inference verifiable rather than "trust the API".
 
 ## Status
 
-Wired and tested (2026-11-05). The worker tries NEAR AI first when the
-key is set, and falls back to the configured endpoint, then Pollinations,
-then the honestly-labelled extractive summariser. **Until Isaiah sets his
-own NEAR AI API key, the worker keeps using Pollinations** — the wiring is
-done, the key is the only missing step, and nobody else can create it for
-him.
+LIVE (2026-11-05). Isaiah's NEAR AI API key is connected and stored in
+the Secure Vault through the `custom.near-ai` connector — the key is never
+in an env var, a file, or a chat message. The worker tries NEAR AI first:
+it uses `NEAR_AI_API_KEY` when that env var is set, and otherwise calls
+the connector helper (`~/workspace/custom-connectors/custom.near-ai/bin/near-ai-call.py`),
+which reaches `cloud-api.near.ai` with a surrogate credential. Verified
+live 2026-11-05 with a real completion on `z-ai/glm-5.3-flash`: real model
+output, `verifiable: true`, and an attestation whose gateway AND model
+nonces both echo the request nonce. The worker falls back to the
+configured endpoint, then Pollinations, then the honestly-labelled
+extractive summariser. **Each verifiable job carries ~300 KB of
+attestation evidence** (the full TDX quote + NVIDIA GPU payload) — that
+is the proof, and it is why job records are larger on this route.
 
 ## How Isaiah gets a key
 
 1. Sign up at https://cloud.near.ai
 2. Add credits — Dashboard → "Credits" (pay-per-use; see Pricing below).
+   **Free path:** claim $10 by joining NEAR Builders
+   (https://nearbuilders.org/join) — connect a NEAR account, create the
+   builder profile, then generate the key in the cloud.near.ai dashboard.
+   At roughly $0.0004 a Genesis job, $10 covers thousands of jobs.
 3. Generate an API key — Dashboard → "API Keys" → create a key. It
    starts with `sk-`.
 4. Keep it safe: never share it, never commit it, never paste it into
-   chat. If it leaks, regenerate it from the dashboard.
+   chat. If it leaks, regenerate it from the dashboard. To hand it to
+   Everest, use the secure entry (the `custom.near-ai` connector), never
+   chat.
 
 ## Env vars
 
-Set these in the shell (or a local `.env` file that is gitignored — never
-in the repo, never in a chat message):
+The key does NOT have to be an env var any more. When the `custom.near-ai`
+connector is installed, the worker uses its helper and the key stays in
+the Secure Vault. Set these only if you want to override that (a direct
+key takes priority over the connector):
 
 ```
-NEAR_AI_API_KEY=sk-...          # required — your NEAR AI Cloud API key
+NEAR_AI_API_KEY=sk-...          # optional — direct key; overrides the connector
 NEAR_AI_MODEL=z-ai/glm-5.3-flash # optional — default is z-ai/glm-5.3-flash
 NEAR_AI_API_URL=https://cloud-api.near.ai/v1  # optional — only for tests
+NEAR_AI_CONNECTOR_HELPER=/path/to/near-ai-call.py  # optional — override the helper path
 ```
+
+Never put the key in the repo, never in a chat message, never in a
+gitignored `.env` that gets copied around — use the connector.
 
 **Where the key lives:** the worker runs in Node — the CLI (`src/cli.js
 job`), the MCP server (`src/mcp-server.mjs`), and the arena

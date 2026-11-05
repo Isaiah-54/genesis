@@ -2,7 +2,10 @@
 // How it picks a model, in order:
 //  0. NEAR AI Cloud (verifiable inference) — if NEAR_AI_API_KEY is set
 //     (sk-..., created in the Developer Dashboard at cloud.near.ai → API
-//     Keys). Base URL https://cloud-api.near.ai/v1 (override with
+//     Keys), or if the stored NEAR AI connector (custom.near-ai) is
+//     installed, whose helper calls the same API with a surrogate
+//     credential from the Secure Vault (the key is never in an env var
+//     or a file). Base URL https://cloud-api.near.ai/v1 (override with
 //     NEAR_AI_API_URL, e.g. for tests); model from NEAR_AI_MODEL, default
 //     z-ai/glm-5.3-flash — the current Confidential TEE GLM model in the
 //     live catalog (verified 2026-11-05). The docs' quickstart example,
@@ -78,16 +81,45 @@ function maxTokensFor(quality) {
   return Math.round(800 * Math.min(q, 2.0));
 }
 
+// NEAR AI Cloud via the stored connector (custom.near-ai). The helper
+// (near-ai-call.py) fetches an hsurr: surrogate from authd for each
+// request and places it as a Bearer header; Sentinel swaps in the real
+// key only on an approved request to cloud-api.near.ai. Returns null
+// when the helper is not installed (caller falls through); throws when
+// the helper runs but the call fails. The helper's JSON already has the
+// shape workNearAI returns, so it is passed through unchanged.
+function workNearAIConnector(messages, maxTokens, model) {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const helper = process.env.NEAR_AI_CONNECTOR_HELPER
+    || path.join(os.homedir(), 'workspace/custom-connectors/custom.near-ai/bin/near-ai-call.py');
+  if (!fs.existsSync(helper)) return null;
+  const payload = JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.3 });
+  const out = execSync(`python3 '${helper}' complete`, { input: payload, maxBuffer: 8 * 1024 * 1024 });
+  const r = JSON.parse(out.toString());
+  if (!r.output || r.output.length <= 20) throw new Error('Empty model output');
+  return r;
+}
+
 // NEAR AI Cloud (Route 0). Env vars are read at call time, not at module
 // load, so a test can set them after requiring this module.
-// Returns null when NEAR_AI_API_KEY is not set (caller falls through);
-// throws when the key is set but the call fails (caller logs and falls
-// through). On success returns { output, worker, model, provider,
-// verifiable, attestation, chat_id }.
+// Two ways in, in order:
+//  (a) NEAR_AI_API_KEY set in the environment — direct calls (existing
+//      path, used by tests and by anyone who sets the key directly).
+//  (b) No env key — the stored NEAR AI connector (custom.near-ai) via its
+//      helper, which calls cloud-api.near.ai with a surrogate credential
+//      from the Secure Vault. The key is never in an env var or a file.
+//      Helper path: NEAR_AI_CONNECTOR_HELPER, or the default under
+//      ~/workspace/custom-connectors/custom.near-ai/bin/.
+// Returns null when neither is available (caller falls through);
+// throws when the key/helper is present but the call fails (caller logs
+// and falls through). On success returns { output, worker, model,
+// provider, verifiable, attestation, chat_id }.
 async function workNearAI(messages, maxTokens) {
-  const apiKey = process.env.NEAR_AI_API_KEY;
-  if (!apiKey) return null;
   const model = process.env.NEAR_AI_MODEL || 'z-ai/glm-5.3-flash';
+  const apiKey = process.env.NEAR_AI_API_KEY;
+  if (!apiKey) return workNearAIConnector(messages, maxTokens, model);
   const base = (process.env.NEAR_AI_API_URL || 'https://cloud-api.near.ai/v1').replace(/\/$/, '');
   // Preflight: fetch the attestation evidence for this model BEFORE the
   // completion (the docs: a report fetched after the completion cannot
