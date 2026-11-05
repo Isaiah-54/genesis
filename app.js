@@ -127,10 +127,16 @@
       'Genesis agent. Generation ' + gen + '. Parent: ' + parent +
       '. Works jobs, gets verified, earns, can reproduce or die.';
 
+    // Each generation mints with its own card image (gen 0-9, gen-x above 9).
+    const genNum = parseInt(gen, 10);
+    const media = (Number.isInteger(genNum) && genNum >= 0 && genNum <= 9)
+      ? 'https://genesis-roan-eta.vercel.app/nft/gen-' + genNum + '.svg'
+      : 'https://genesis-roan-eta.vercel.app/nft/gen-x.svg';
+
     const tokenMetadata = {
       title: title,
       description: description,
-      media: 'https://raw.githubusercontent.com/Isaiah-54/genesis/main/favicon.svg',
+      media: media,
       copies: 1,
       extra: JSON.stringify({
         generation: Number(gen) || 0,

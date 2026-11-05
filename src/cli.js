@@ -18,6 +18,7 @@ const { execSync } = require('child_process');
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = require('near-api-js');
 const { work, verify } = require('./engine');
 const { workLLM } = require('./worker-llm');
+const { mediaForGen } = require('./nft-media.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
 const TOKENS = ['genesis-gen-0', 'genesis-gen-1', 'genesis-gen-2', 'genesis-gen-3', 'genesis-weak-2', 'genesis-gen-5-weak'];
@@ -106,7 +107,7 @@ async function main() {
   }
   if (cmd === 'mint') {
     const [, tokenId, receiver, title, gen, parent] = a;
-    const metadata = { title, description: `Genesis agent, generation ${gen}, parent ${parent}.`, media: '', extra: JSON.stringify({ generation: gen, parent, status: 'alive' }) };
+    const metadata = { title, description: `Genesis agent, generation ${gen}, parent ${parent}.`, media: mediaForGen(gen), extra: JSON.stringify({ generation: gen, parent, status: 'alive' }) };
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: tokenId, receiver_id: receiver, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))], dryRun, label: 'mint ' + tokenId }));
     return;
   }

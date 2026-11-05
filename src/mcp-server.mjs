@@ -14,6 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import nearApi from 'near-api-js';
+import { mediaForGen } from './nft-media.js';
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = nearApi;
 import engine from './engine.js';
 const { verify } = engine;
@@ -61,7 +62,7 @@ server.tool('genesis_pay', 'Pay testnet NEAR from the Genesis treasury (master a
 server.tool('genesis_mint', 'Mint a Genesis NFT (NEP-171) on nft.primitives.testnet to a receiver account, with generation/parent/skill traits.', { token_id: z.string(), receiver_id: z.string(), title: z.string(), generation: z.number(), parent: z.string(), speed: z.number(), quality: z.number(), costEff: z.number() }, async (a) => {
   // NEP-177 has no attributes field — traits go in `extra` (JSON string),
   // which the contract actually stores. Do not pass attributes; they are dropped.
-  const metadata = { title: a.title, description: `Genesis agent, generation ${a.generation}, parent ${a.parent}.`, media: `data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 288 288%27%3E%3Crect width=%27288%27 height=%27288%27 fill=%27%230b1020%27/%3E%3Ctext x=%27144%27 y=%27160%27 font-size=%2764%27 text-anchor=%27middle%27 fill=%27%233ddc84%27 font-family=%27sans-serif%27 font-weight=%27bold%27%3EG${a.generation}%3C/text%3E%3C/svg%3E`,
+  const metadata = { title: a.title, description: `Genesis agent, generation ${a.generation}, parent ${a.parent}.`, media: mediaForGen(a.generation),
     extra: JSON.stringify({ generation: a.generation, parent: a.parent, speed: a.speed, quality: a.quality, costEff: a.costEff, status: 'alive' }) };
   return text(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: a.token_id, receiver_id: a.receiver_id, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))] }));
 });

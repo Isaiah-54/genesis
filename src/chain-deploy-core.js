@@ -27,10 +27,18 @@ const PROFIT_THRESHOLD_YOCTO = '1500000000000000000000000'; // 1.5 NEAR
 
 function rpc(method, params) {
   const payload = JSON.stringify({ jsonrpc: '2.0', id: 'x', method, params });
-  const out = execSync(`curl -s -m 60 https://rpc.testnet.near.org -H 'Content-Type: application/json' -d '${payload}'`, { maxBuffer: 10 * 1024 * 1024 });
-  const j = JSON.parse(out.toString());
-  if (j.error) throw new Error('RPC error: ' + JSON.stringify(j.error).slice(0, 500));
-  return j.result;
+  // Pass the body via a file, not the command line: a deploy tx is ~140 KB
+  // base64 and exceeds the OS argument limit (spawnSync E2BIG).
+  const tmp = `.rpc-payload-${process.pid}.json`;
+  fs.writeFileSync(tmp, payload);
+  try {
+    const out = execSync(`curl -s -m 60 https://rpc.testnet.near.org -H 'Content-Type: application/json' --data-binary @${tmp}`, { maxBuffer: 10 * 1024 * 1024 });
+    const j = JSON.parse(out.toString());
+    if (j.error) throw new Error('RPC error: ' + JSON.stringify(j.error).slice(0, 500));
+    return j.result;
+  } finally {
+    try { fs.unlinkSync(tmp); } catch {}
+  }
 }
 function viewAccount(id) {
   return rpc('query', { request_type: 'view_account', account_id: id, finality: 'final' });
@@ -72,19 +80,36 @@ async function main() {
   console.log(`Master ${MASTER}: ${masterBal.toFixed(4)} NEAR. Core account ${CORE_ID} will be funded ${FUND_NEAR} NEAR.`);
   console.log(`Init: new({owner_id: ${MASTER}, treasury: ${MASTER}}). set_params: birth_cost 0.5 NEAR, profit_threshold 1.5 NEAR, max_consecutive_fails 3, min_jobs_to_reproduce 3.`);
   if (dryRun) { console.log('DRY RUN — nothing signed, nothing broadcast, no key file written.'); return; }
-  if (masterBal < 4.1) throw new Error(`Master balance ${masterBal} NEAR is below the 4.1 NEAR needed (4 funding + gas). Top up testnet NEAR first.`);
-  // Key-save-first: write the core key BEFORE any creation tx.
-  const coreKey = KeyPair.fromRandom('ed25519');
-  fs.writeFileSync('.testnet-core-account.json', JSON.stringify({ accountId: CORE_ID, privateKey: coreKey.toString() }, null, 2));
-  fs.chmodSync('.testnet-core-account.json', 0o600);
-  console.log('Core key saved to .testnet-core-account.json (600) BEFORE any tx.');
+  // Resume-safe: the core account may already exist from an earlier run
+  // (e.g. a failure after the create step). Never overwrite its saved key
+  // and never try to create it twice.
+  let coreExists = false;
+  try { viewAccount(CORE_ID); coreExists = true; } catch { coreExists = false; }
+  if (!coreExists && masterBal < 4.1) throw new Error(`Master balance ${masterBal} NEAR is below the 4.1 NEAR needed (4 funding + gas). Top up testnet NEAR first.`);
+  if (coreExists && masterBal < 0.05) throw new Error(`Master balance ${masterBal} NEAR is too low for the remaining steps (set_params gas). Top up testnet NEAR first.`);
+  // Key-save-first: write the core key BEFORE any creation tx (only when
+  // creating). On resume, reuse the key saved by the earlier run.
+  let coreKey;
+  if (coreExists) {
+    coreKey = KeyPair.fromString(JSON.parse(fs.readFileSync('.testnet-core-account.json', 'utf8')).privateKey);
+    console.log('Core account already exists — reusing its saved key, skipping creation.');
+  } else {
+    coreKey = KeyPair.fromRandom('ed25519');
+    fs.writeFileSync('.testnet-core-account.json', JSON.stringify({ accountId: CORE_ID, privateKey: coreKey.toString() }, null, 2));
+    fs.chmodSync('.testnet-core-account.json', 0o600);
+    console.log('Core key saved to .testnet-core-account.json (600) BEFORE any tx.');
+  }
   const masterKp = KeyPair.fromString(MASTER_SAVED.privateKey);
   const proof = { master: MASTER, core: CORE_ID, wasmBytes: wasm.length, wasmStorageNearEstimate: storageNear, txs: {} };
-  proof.txs.createCore = await sendTx(MASTER, masterKp, CORE_ID, [
-    transactions.createAccount(),
-    transactions.transfer(utils.format.parseNearAmount(FUND_NEAR)),
-    transactions.addKey(coreKey.getPublicKey(), transactions.fullAccessKey()),
-  ], 'create core account', dryRun);
+  if (coreExists) {
+    proof.txs.createCore = { status: 'SKIPPED — account already existed from an earlier run' };
+  } else {
+    proof.txs.createCore = await sendTx(MASTER, masterKp, CORE_ID, [
+      transactions.createAccount(),
+      transactions.transfer(utils.format.parseNearAmount(FUND_NEAR)),
+      transactions.addKey(coreKey.getPublicKey(), transactions.fullAccessKey()),
+    ], 'create core account', dryRun);
+  }
   proof.txs.deploy = await sendTx(CORE_ID, coreKey, CORE_ID, [
     transactions.deployContract(wasm),
   ], 'deploy contract', dryRun);

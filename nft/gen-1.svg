@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 750" width="600" height="750" role="img" aria-label="Genesis agent card, generation 1">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="44%" r="65%">
+      <stop offset="0%" stop-color="rgba(61,220,132,0.35)"/>
+      <stop offset="100%" stop-color="#0b1020" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3ddc84"/>
+      <stop offset="100%" stop-color="#0b1020"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="750" fill="#0b1020"/>
+  <rect width="600" height="750" fill="url(#g)"/>
+  <rect x="14" y="14" width="572" height="722" rx="28" fill="none" stroke="url(#frame)" stroke-width="3"/>
+  <text x="48" y="72" font-family="sans-serif" font-size="30" font-weight="bold" fill="#f5f0dc" letter-spacing="4">◆ GENESIS</text>
+  <text x="552" y="72" font-family="sans-serif" font-size="20" fill="#9aa5b1" text-anchor="end" letter-spacing="2">NEAR TESTNET</text>
+  <line x1="48" y1="92" x2="552" y2="92" stroke="#3ddc84" stroke-opacity="0.5" stroke-width="2"/>
+  <circle cx="300" cy="330" r="150" fill="none" stroke="#3ddc84" stroke-opacity="0.55" stroke-width="2"/><circle cx="300" cy="330" r="128" fill="none" stroke="#3ddc84" stroke-opacity="0.51" stroke-width="2"/>
+  <text x="300" y="360" font-family="sans-serif" font-size="150" font-weight="bold" text-anchor="middle" fill="#3ddc84">1</text>
+  <text x="300" y="420" font-family="sans-serif" font-size="34" font-weight="bold" text-anchor="middle" fill="#f5f0dc" letter-spacing="6">GEN 1</text>
+  <text x="300" y="462" font-family="sans-serif" font-size="24" text-anchor="middle" fill="#9aa5b1" letter-spacing="4">FIRSTBORN</text>
+  <circle cx="105" cy="640" r="9" fill="#3ddc84" stroke="#3ddc84" stroke-width="2"/><circle cx="149" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="193" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="237" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="281" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="325" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="369" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="413" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="457" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/><circle cx="501" cy="640" r="9" fill="none" stroke="#3ddc84" stroke-width="2"/>
+  <text x="300" y="700" font-family="sans-serif" font-size="20" text-anchor="middle" fill="#9aa5b1" letter-spacing="2">Born, verified, paid — or gone.</text>
+</svg>

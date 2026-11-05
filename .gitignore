@@ -3,3 +3,8 @@ node_modules/
 *.key
 .env
 .testnet-agents.json
+
+target/
+build-core-local.log
+
+.testnet-core-account.json

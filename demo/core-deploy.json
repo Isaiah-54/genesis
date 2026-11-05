@@ -1,0 +1,30 @@
+{
+  "master": "genesisdemo354551.testnet",
+  "core": "core.genesisdemo354551.testnet",
+  "wasmBytes": 104091,
+  "wasmStorageNearEstimate": "1.04",
+  "txs": {
+    "createCore": {
+      "status": "SKIPPED — account already existed from an earlier run"
+    },
+    "deploy": {
+      "hash": "215303325037b890a0377560b9707bfde90dd77069cbb69f60de7b6515dd570f",
+      "status": "Success"
+    },
+    "init": {
+      "hash": "3673385fd27db4684c39e4b072add4e45bfbf4b6c4e6577f2ffcd59be77b7c6b",
+      "status": "Success"
+    },
+    "setParams": {
+      "hash": "14fc4e43cd2d6a447b60dd651b3b81d9ff57ee927a13a6617a589c54e27ecf2d",
+      "status": "Success"
+    }
+  },
+  "verification": {
+    "agent_count": 0,
+    "get_agent_genesis_gen_2": null,
+    "masterBalanceNear": 2.289183444372946,
+    "coreBalanceNear": 3.999047690923244,
+    "note": "agent_count 0 and get_agent null are EXPECTED: the registry starts empty; existing NFT agents are not auto-imported."
+  }
+}

@@ -20,7 +20,7 @@ use near_sdk::{
 };
 
 /// Simple skill set that mutates on birth.
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Skill {
     pub speed: f32,
@@ -38,14 +38,14 @@ impl Default for Skill {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub enum AgentStatus {
     Alive,
     Dead,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Agent {
     pub token_id: String,
@@ -56,15 +56,21 @@ pub struct Agent {
     pub status: AgentStatus,
     pub jobs_done: u32,
     pub consecutive_fails: u32,
+    // U128 has no JsonSchema impl in near-sdk 5.30; it serialises as a
+    // string in JSON, so declare the schema as String for the ABI.
+    #[schemars(with = "String")]
     pub earned: U128,          // yoctoNEAR
     pub created_at: u64,       // block timestamp
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, schemars::JsonSchema, serde::Serialize, serde::Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Job {
     pub job_id: String,
     pub poster: AccountId,
+    // U128 has no JsonSchema impl in near-sdk 5.30; it serialises as a
+    // string in JSON, so declare the schema as String for the ABI.
+    #[schemars(with = "String")]
     pub reward: U128,
     pub brief: String,
     pub keywords: Vec<String>,
