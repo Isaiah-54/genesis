@@ -5,6 +5,9 @@
  * string — never assign it as the account id (doing so prints the function
  * source into the button). The connected account id is the STRING returned
  * by connect()/restore(), or by calling accountId({ network }).
+ * NOTE 2: the library defaults to MAINNET on every fresh page load, so
+ * restore()/disconnect() MUST be passed { network: 'testnet' } or they look
+ * at the mainnet session (empty) and the connection is lost on navigation.
  */
 (function () {
   const NFT_CONTRACT = 'nft.primitives.testnet';
@@ -63,7 +66,7 @@
     try {
       const nw = fastnear();
       if (accountId) {
-        try { await nw.disconnect(); } catch (_) {}
+        try { await nw.disconnect({ network: NETWORK }); } catch (_) {}
         accountId = null;
         updateWalletButtons();
         return;
@@ -313,7 +316,7 @@
   window.addEventListener('load', async () => {
     try {
       const nw = fastnear();
-      const restored = await nw.restore();
+      const restored = await nw.restore({ network: NETWORK });
       const id = restored && typeof restored.accountId === 'string' ? restored.accountId : null;
       if (id) {
         accountId = id;
