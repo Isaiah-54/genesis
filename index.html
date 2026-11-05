@@ -100,6 +100,7 @@ textarea{min-height:110px}.out{background:#0a0e1f;border:1px solid var(--line);b
 <p><button id="runAgentJobBtn">Run a job for my agent</button> <button class="ghost" id="copyAgentJobBtn" style="display:none">Copy passed result for payment</button></p>
 <div class="out" id="agentJobOut">Connect a wallet first (Mint section), then press Run a job for my agent.</div>
 <p class="small" id="agentJobVerdict"></p>
+<p class="small mono" id="agentJobHash" style="word-break:break-all"></p>
 <p class="small" id="agentJobPay"></p>
 </div>
 
@@ -298,7 +299,7 @@ document.getElementById("runJobBtn").onclick=async()=>{
 // hash and pays 0.01 NEAR from the treasury to the connected account.
 let agentJobResult = "";
 document.getElementById("runAgentJobBtn").onclick=async()=>{
-  const out=document.getElementById("agentJobOut"), verdict=document.getElementById("agentJobVerdict"), pay=document.getElementById("agentJobPay"), copyBtn=document.getElementById("copyAgentJobBtn");
+  const out=document.getElementById("agentJobOut"), verdict=document.getElementById("agentJobVerdict"), pay=document.getElementById("agentJobPay"), copyBtn=document.getElementById("copyAgentJobBtn"), hashEl=document.getElementById("agentJobHash");
   const acct=window.__genesisAccount||"";
   if(!acct){ out.textContent="Connect a wallet first (Mint section above) — the job pays your connected account."; verdict.textContent=""; pay.textContent=""; return; }
   if(!acct.endsWith(".testnet")){ out.textContent="Connected account "+acct+" is a mainnet account — Genesis runs on testnet only. Switch to a .testnet account first."; verdict.textContent=""; pay.textContent=""; return; }
@@ -306,7 +307,7 @@ document.getElementById("runAgentJobBtn").onclick=async()=>{
   const text=document.getElementById("agentJobText").value, brief=document.getElementById("agentJobBrief").value;
   const keywords=document.getElementById("agentJobKeywords").value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
   const minWords=parseInt(document.getElementById("agentJobMin").value,10)||20;
-  out.textContent="Working… (real model call, can take up to a minute)"; copyBtn.style.display="none"; pay.textContent="";
+  out.textContent="Working… (real model call, can take up to a minute)"; copyBtn.style.display="none"; pay.textContent=""; hashEl.textContent="";
   try{
     const prompt="system: You are a Genesis agent. Write a clear summary of the job text that answers the brief. Use plain language, at least "+minWords+" words, and make sure to cover these keywords naturally: "+keywords.join(", ")+". Do not add facts that are not in the text.\n\nuser: Brief: "+brief+"\n\nText:\n"+text.slice(0,4000);
     const r=await fetch("https://text.pollinations.ai/"+encodeURIComponent(prompt));
@@ -320,6 +321,7 @@ document.getElementById("runAgentJobBtn").onclick=async()=>{
     const buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(output));
     const hash=[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
     verdict.textContent="Agent: "+token+" ("+acct+") · Worker: llm (pollinations, in your browser) · "+words+" words · "+covered+"/"+keywords.length+" keywords · Verdict: "+(pass?"PASS":"FAIL")+" · Output hash: "+hash.slice(0,16)+"…";
+    hashEl.textContent="Full output sha256: "+hash;
     if(pass){
       agentJobResult="Genesis job result — token "+token+", account "+acct+", "+words+" words, "+covered+"/"+keywords.length+" keywords, PASS, sha256 "+hash+"\nOutput: "+output;
       copyBtn.style.display="inline-block";
