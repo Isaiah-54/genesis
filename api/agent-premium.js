@@ -40,6 +40,7 @@
 //   earnings breakdown — the payment buys the detail, not the agent.
 const fs = require('fs');
 const path = require('path');
+const rail = require('./near-intents-rail');
 
 const RPC_URL = 'https://rpc.testnet.near.org';
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
@@ -58,6 +59,11 @@ function fetchWithTimeout(fetchImpl, url, opts) {
 const USDC_CONTRACT = '3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af';
 const PRICE_USDC_SMALLEST = '10000'; // 0.01 USDC, 6 decimals
 const PRICE_DISPLAY = '0.01 testnet USDC';
+// near-intents rail (primary): 0.35 MAINNET USDC — above the highest
+// offered route minimum (Ethereum USDC ~0.30 USDC) so a quote usually
+// clears. Mainnet money is real; the exact rail's 0.01 is free
+// testnet faucet USDC.
+const INTENTS_PRICE_USDC_SMALLEST = 350000;
 const NETWORK = 'near:testnet';
 const PAYMENTS_LOG = process.env.X402_PAYMENTS_LOG || path.join(__dirname, '..', 'demo', 'x402-payments.json');
 
@@ -135,35 +141,40 @@ function recordPayment(entry) {
 // durable record; the chain is the source of truth).
 const usedTxHashes = new Set();
 
-function paymentRequirements(tokenId) {
+// The 402 offers BOTH rails, near-intents FIRST (primary) and exact
+// LAST (secondary). The same object goes in the Payment-Required
+// header (base64) and in the JSON body, so header truncation cannot
+// hide it. The exact entry keeps its nonce/expiresAt fields for
+// backwards compatibility.
+function paymentRequirements(tokenId, resourceUrl) {
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-  return {
-    x402Version: 2,
-    error: 'Payment Required',
-    accepts: [{
-      scheme: 'exact',
-      network: NETWORK,
-      amount: PRICE_USDC_SMALLEST,
-      asset: USDC_CONTRACT,
-      recipient: TREASURY_ACCOUNT,
-      nonce: tokenId + '-' + Date.now(),
-      expiresAt,
-      payTo: TREASURY_ACCOUNT,
-      description: 'Premium CV for ' + tokenId + ' — full match history and earnings breakdown',
-    }],
-  };
+  const accepts = rail.buildAccepts({
+    nearIntentsPriceUsdc: INTENTS_PRICE_USDC_SMALLEST,
+    exactPriceUsdc: Number(PRICE_USDC_SMALLEST),
+    testnetUsdcContract: USDC_CONTRACT, treasury: TREASURY_ACCOUNT,
+    resource: { url: resourceUrl || 'https://genesis-roan-eta.vercel.app/api/agent-premium?token_id=' + tokenId },
+    exactDescription: 'Premium CV for ' + tokenId + ' — full match history and earnings breakdown (secondary rail, testnet USDC)',
+  });
+  const exact = accepts[accepts.length - 1];
+  exact.nonce = tokenId + '-' + Date.now();
+  exact.expiresAt = expiresAt;
+  return { x402Version: 2, error: 'Payment Required', accepts };
 }
 
-function paymentRequiredResponse(res, tokenId) {
-  const required = paymentRequirements(tokenId);
+function paymentRequiredResponse(res, tokenId, resourceUrl, error, acceptsOverride) {
+  const required = acceptsOverride
+    ? { x402Version: 2, error: error || 'Payment Required', accepts: acceptsOverride }
+    : paymentRequirements(tokenId, resourceUrl);
+  if (error && !acceptsOverride) required.error = error;
   const header = Buffer.from(JSON.stringify(required)).toString('base64');
   res.setHeader('PAYMENT-REQUIRED', header);
   return res.status(402).json({
     ok: false,
-    error: 'Payment Required',
+    error: error || 'Payment Required',
     x402: required,
     howToPay: [
-      '1. Get free testnet USDC from the Circle faucet (faucet.circle.com, NEAR Testnet).',
+      'PRIMARY — near-intents (any chain): send PAYMENT-SIGNATURE {type:"quote", refundTo:"<your address on the origin chain>"} (base64, in ?paymentSignature=) to get a deposit address, deposit, then send {type:"deposit", operationToken, depositAddress, txHash}. Price 0.35 mainnet USDC. Currently blocked: 1Click NEAR quoting is down, so this rail returns 1Click\'s real error until the solvers return.',
+      'SECONDARY — exact (testnet USDC, works now): 1. Get free testnet USDC from the Circle faucet (faucet.circle.com, NEAR Testnet).',
       '2. Send ' + PRICE_DISPLAY + ' to ' + TREASURY_ACCOUNT + ' with ft_transfer on ' + USDC_CONTRACT + '.',
       '3. Retry this URL with ?paymentTx=<transaction hash>&paymentSender=<your account id>.',
       'The payment is verified onchain; one transaction hash buys one access.',
@@ -188,9 +199,11 @@ async function rpcTx(txHashHex, sender, fetchImpl) {
 
 // Verify a testnet USDC payment onchain. Returns { valid, reason }.
 // The transaction must have succeeded and must contain an ft_transfer
-// on the testnet USDC contract sending >= PRICE_USDC_SMALLEST to the
-// treasury. The tx hash must not have been used before.
-async function verifyPayment(txHash, sender, fetchImpl) {
+// on the testnet USDC contract sending >= minAmount (default the
+// premium price) to the treasury. The tx hash must not have been used
+// before. minAmount is in the USDC contract's smallest units.
+async function verifyPayment(txHash, sender, fetchImpl, minAmount) {
+  const min = BigInt(String(minAmount || PRICE_USDC_SMALLEST));
   const txHashHex = normaliseTxHash(txHash);
   if (!txHashHex) {
     return { valid: false, reason: 'paymentTx must be a transaction hash (64-hex, or base58 as shown on Nearblocks)' };
@@ -223,11 +236,11 @@ async function verifyPayment(txHash, sender, fetchImpl) {
     try {
       args = JSON.parse(Buffer.from(String(fc.args || ''), 'base64').toString('utf8'));
     } catch (_) { continue; }
-    if (args && args.receiver_id === TREASURY_ACCOUNT && BigInt(String(args.amount || '0')) >= BigInt(PRICE_USDC_SMALLEST)) {
+    if (args && args.receiver_id === TREASURY_ACCOUNT && BigInt(String(args.amount || '0')) >= min) {
       return { valid: true, reason: null, amount: String(args.amount), sender: tx.signer_id, txHash: key };
     }
   }
-  return { valid: false, reason: 'transaction does not contain an ft_transfer of >= ' + PRICE_DISPLAY + ' to ' + TREASURY_ACCOUNT };
+  return { valid: false, reason: 'transaction does not contain an ft_transfer of >= ' + (Number(min) / 1e6) + ' testnet USDC to ' + TREASURY_ACCOUNT };
 }
 
 async function rpcView(contractId, method, args, fetchImpl) {
@@ -259,34 +272,15 @@ function readLeague() {
   }
 }
 
-module.exports = async (req, res) => {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ ok: false, error: 'GET only' });
-  }
-  const tokenId = String((req.query && req.query.token_id) || '').trim();
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(tokenId)) {
-    return res.status(400).json({ ok: false, error: 'token_id is required (a Genesis agent token id)' });
-  }
-  const paymentTx = String((req.query && req.query.paymentTx) || '').trim();
-  const paymentSender = String((req.query && req.query.paymentSender) || '').trim();
-  if (!paymentTx || !paymentSender) {
-    return paymentRequiredResponse(res, tokenId);
-  }
-  const fetchImpl = (global.fetch || require('node-fetch'));
-  const check = await verifyPayment(paymentTx, paymentSender, fetchImpl);
-  if (!check.valid) {
-    return paymentRequiredResponse(res, tokenId);
-  }
-  // Payment verified — record it (dedup) and serve the premium CV.
-  // Canonicalise on the 64-hex hash so a base58 hash and its hex form
-  // dedup against each other instead of paying twice for one tx.
-  const txHashHex = check.txHash || paymentTx.toLowerCase();
-  usedTxHashes.add(txHashHex);
-  recordPayment({
-    token_id: tokenId, txHash: txHashHex,
-    sender: check.sender || paymentSender, amount: check.amount,
-    paidAt: new Date().toISOString(),
-  });
+function resourceUrlFor(req, tokenId) {
+  const host = (req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || 'genesis-roan-eta.vercel.app';
+  const proto = (req.headers && req.headers['x-forwarded-proto']) || 'https';
+  return `${proto}://${host}/api/agent-premium?token_id=${tokenId}`;
+}
+
+// Serve the premium CV after a verified payment (either rail).
+// settlement is { rail, txHash?, amount, payer, originTx?, destTx? }.
+async function serveCv(res, tokenId, fetchImpl, settlement) {
   let agent = null;
   try { agent = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: tokenId }, fetchImpl); } catch (_) {}
   if (!agent) {
@@ -298,9 +292,19 @@ module.exports = async (req, res) => {
   const matches = league && Array.isArray(league.matches)
     ? league.matches.filter((m) => m.winner === tokenId || m.loser === tokenId || (m.contestants || []).includes(tokenId))
     : [];
+  const paymentId = settlement.rail === 'near-intents'
+    ? 'intents:' + (settlement.operationId || settlement.originTx || '')
+    : 'exact:' + settlement.txHash;
+  const receipt = rail.signReceipt({
+    v: 1, kind: 'premium', paymentId, action: 'premium-cv', token_id: tokenId,
+    amountUsdc: String(settlement.amount), rail: settlement.rail,
+    network: settlement.rail === 'near-intents' ? 'near:mainnet' : NETWORK,
+    transaction: settlement.destTx || settlement.txHash || '', originTx: settlement.originTx || settlement.txHash || '',
+    payer: settlement.payer, timestamp: new Date().toISOString(), simulated: !!settlement.simulated,
+  });
   const response = {
     x402Version: 2,
-    settlement: { txHash: txHashHex, sender: check.sender || paymentSender, amount: check.amount, asset: USDC_CONTRACT, network: NETWORK },
+    settlement: { txHash: settlement.txHash || settlement.destTx || '', sender: settlement.payer, amount: String(settlement.amount), asset: settlement.rail === 'near-intents' ? rail.DESTINATION_ASSET : USDC_CONTRACT, network: settlement.rail === 'near-intents' ? 'near:mainnet' : NETWORK, rail: settlement.rail },
   };
   res.setHeader('PAYMENT-RESPONSE', Buffer.from(JSON.stringify(response)).toString('base64'));
   return res.status(200).json({
@@ -310,8 +314,111 @@ module.exports = async (req, res) => {
     agent,
     leagueStanding: standing || null,
     matches,
-    paidWith: { txHash: txHashHex, amount: check.amount, asset: USDC_CONTRACT, network: NETWORK },
+    paidWith: { txHash: settlement.txHash || settlement.destTx || '', amount: String(settlement.amount), asset: settlement.rail === 'near-intents' ? rail.DESTINATION_ASSET : USDC_CONTRACT, network: settlement.rail === 'near-intents' ? 'near:mainnet' : NETWORK, rail: settlement.rail },
+    receipt,
+  });
+}
+
+module.exports = async (req, res) => {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'GET only' });
+  }
+  const tokenId = String((req.query && req.query.token_id) || '').trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(tokenId)) {
+    return res.status(400).json({ ok: false, error: 'token_id is required (a Genesis agent token id)' });
+  }
+  const resourceUrl = resourceUrlFor(req, tokenId);
+  const fetchImpl = (global.fetch || require('node-fetch'));
+  const mode = String((req.query && req.query.mode) || 'live').toLowerCase();
+  const modeOk = ['live', 'dry', 'demo'].includes(mode) ? mode : 'live';
+
+  // --- near-intents rail: PAYMENT-SIGNATURE (quote / deposit) ---
+  const sigRaw = (req.headers && (req.headers['payment-signature'] || req.headers['PAYMENT-SIGNATURE'])) || (req.query && req.query.paymentSignature);
+  if (sigRaw) {
+    const presented = rail.parsePaymentSignature(String(sigRaw));
+    if (!presented) return paymentRequiredResponse(res, tokenId, resourceUrl, 'PAYMENT-SIGNATURE is not a valid x402 v2 payload');
+    const acc = presented.accepted;
+    const isIntents = acc.extra && acc.extra.assetTransferMethod === 'near-intents';
+    if (!isIntents) {
+      return paymentRequiredResponse(res, tokenId, resourceUrl, 'the exact rail takes paymentTx + paymentSender, not a PAYMENT-SIGNATURE — pay testnet USDC to the treasury, then retry with the tx hash');
+    }
+    const origin = rail.findOrigin(acc.network, acc.asset);
+    if (!origin) return paymentRequiredResponse(res, tokenId, resourceUrl, 'unknown origin network/asset in the presented offer');
+    const ours = paymentRequirements(tokenId, resourceUrl).accepts
+      .find((a) => a.network === acc.network && a.asset.toLowerCase() === String(acc.asset).toLowerCase() && a.extra && a.extra.assetTransferMethod === 'near-intents');
+    if (!ours) return paymentRequiredResponse(res, tokenId, resourceUrl, 'the presented near-intents offer is not one of this resource\'s offers');
+    const payload = presented.payload || {};
+    if (payload.type === 'quote') {
+      const quoted = await rail.quoteForAction({
+        origin, priceUsdcSmallest: INTENTS_PRICE_USDC_SMALLEST, resource: resourceUrl,
+        refundTo: payload.refundTo, slippageTolerance: payload.slippageTolerance,
+        mode: modeOk, fetchImpl, now: Date.now(),
+      });
+      if (quoted.kind !== 'quoted') {
+        return paymentRequiredResponse(res, tokenId, resourceUrl, quoted.message);
+      }
+      const base = paymentRequirements(tokenId, resourceUrl);
+      const quotedAccepts = base.accepts.map((a) => (a.network === origin.caip2 && a.asset.toLowerCase() === origin.x402Asset.toLowerCase() && a.extra && a.extra.assetTransferMethod === 'near-intents' ? quoted.quoted : a));
+      res.setHeader('Payment-Required', Buffer.from(JSON.stringify({ x402Version: 2, error: 'Payment Required', accepts: quotedAccepts })).toString('base64'));
+      return res.status(402).json({
+        ok: false,
+        error: 'near-intents quote issued — deposit ' + (quoted.amountIn || '?') + ' ' + origin.symbol + ' to ' + quoted.depositAddress + ' on ' + origin.label + ', then present the deposit',
+        step: 'deposit', quoted: quoted.quoted, resource: resourceUrl,
+        x402: { x402Version: 2, error: 'Payment Required', accepts: quotedAccepts },
+      });
+    }
+    if (payload.type === 'deposit') {
+      const settled = await rail.settleDeposit({
+        origin, operationToken: payload.operationToken, depositAddress: payload.depositAddress,
+        depositMemo: payload.depositMemo, txHash: payload.txHash, resource: resourceUrl,
+        priceUsdcSmallest: INTENTS_PRICE_USDC_SMALLEST, mode: modeOk, fetchImpl, now: Date.now(),
+      });
+      if (settled.kind === 'pending') {
+        res.setHeader('Retry-After', '5');
+        return paymentRequiredResponse(res, tokenId, resourceUrl, 'near-intents settlement is pending — retry with the same deposit in a few seconds');
+      }
+      if (settled.kind !== 'settled') {
+        return paymentRequiredResponse(res, tokenId, resourceUrl, settled.message || 'near-intents payment did not settle');
+      }
+      const instrument = settled.fields.operationId;
+      const paymentId = 'intents:' + instrument;
+      if (usedTxHashes.has(paymentId)) {
+        return paymentRequiredResponse(res, tokenId, resourceUrl, 'this near-intents operation was already used for access');
+      }
+      usedTxHashes.add(paymentId);
+      recordPayment({ token_id: tokenId, txHash: paymentId, sender: settled.fields.payer, amount: String(INTENTS_PRICE_USDC_SMALLEST), rail: 'near-intents', originTx: settled.fields.originTx, destTx: settled.settle.transaction, paidAt: new Date().toISOString() });
+      return serveCv(res, tokenId, fetchImpl, {
+        rail: 'near-intents', amount: INTENTS_PRICE_USDC_SMALLEST, payer: settled.fields.payer,
+        originTx: settled.fields.originTx, destTx: settled.settle.transaction,
+        operationId: instrument, simulated: settled.fields.simulated || false,
+      });
+    }
+    return paymentRequiredResponse(res, tokenId, resourceUrl, 'unknown near-intents payload type (expected quote or deposit)');
+  }
+
+  // --- exact rail: paymentTx + paymentSender ---
+  const paymentTx = String((req.query && req.query.paymentTx) || '').trim();
+  const paymentSender = String((req.query && req.query.paymentSender) || '').trim();
+  if (!paymentTx || !paymentSender) {
+    return paymentRequiredResponse(res, tokenId, resourceUrl);
+  }
+  const check = await verifyPayment(paymentTx, paymentSender, fetchImpl);
+  if (!check.valid) {
+    return paymentRequiredResponse(res, tokenId, resourceUrl);
+  }
+  // Payment verified — record it (dedup) and serve the premium CV.
+  // Canonicalise on the 64-hex hash so a base58 hash and its hex form
+  // dedup against each other instead of paying twice for one tx.
+  const txHashHex = check.txHash || paymentTx.toLowerCase();
+  usedTxHashes.add(txHashHex);
+  recordPayment({
+    token_id: tokenId, txHash: txHashHex,
+    sender: check.sender || paymentSender, amount: check.amount,
+    paidAt: new Date().toISOString(),
+  });
+  return serveCv(res, tokenId, fetchImpl, {
+    rail: 'exact', txHash: txHashHex, amount: check.amount, payer: check.sender || paymentSender,
   });
 };
 
-module.exports._test = { hexToBase58, base58ToHex, normaliseTxHash, verifyPayment, paymentRequirements, USDC_CONTRACT, TREASURY_ACCOUNT, PRICE_USDC_SMALLEST };
+module.exports._test = { hexToBase58, base58ToHex, normaliseTxHash, verifyPayment, paymentRequirements, USDC_CONTRACT, TREASURY_ACCOUNT, PRICE_USDC_SMALLEST, INTENTS_PRICE_USDC_SMALLEST };

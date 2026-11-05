@@ -121,11 +121,16 @@ const TX5 = 'e'.repeat(64);
   if (!r.headers['PAYMENT-REQUIRED']) fail('402 response has no PAYMENT-REQUIRED header');
   const required = JSON.parse(Buffer.from(r.headers['PAYMENT-REQUIRED'], 'base64').toString('utf8'));
   if (required.x402Version !== 2) fail('PAYMENT-REQUIRED is not x402 v2');
-  if (required.accepts[0].scheme !== 'exact') fail('scheme is not exact');
-  if (required.accepts[0].network !== 'near:testnet') fail('network is not near:testnet');
-  if (required.accepts[0].asset !== USDC_CONTRACT) fail('asset is not testnet USDC');
-  if (required.accepts[0].recipient !== TREASURY_ACCOUNT) fail('recipient is not the treasury');
-  if (required.accepts[0].amount !== '10000') fail('amount is not 10000 (0.01 USDC)');
+  // Two rails: near-intents FIRST (primary, 6 entries), exact LAST
+  // (secondary, 1 entry). The exact entry keeps its old shape.
+  if (required.accepts.length !== 7) fail('402 does not offer 7 accepts (6 near-intents + 1 exact)');
+  if (!required.accepts.slice(0, 6).every((a) => a.extra && a.extra.assetTransferMethod === 'near-intents')) fail('near-intents entries are not first');
+  const exact = required.accepts[6];
+  if (exact.scheme !== 'exact') fail('scheme is not exact');
+  if (exact.network !== 'near:testnet') fail('network is not near:testnet');
+  if (exact.asset !== USDC_CONTRACT) fail('asset is not testnet USDC');
+  if (exact.recipient !== TREASURY_ACCOUNT) fail('recipient is not the treasury');
+  if (exact.amount !== '10000') fail('amount is not 10000 (0.01 USDC)');
   if (!Array.isArray(r.payload.howToPay) || r.payload.howToPay.length < 3) fail('402 body has no payment instructions');
 
   // 2. Valid payment -> 200 with the premium CV + PAYMENT-RESPONSE.
