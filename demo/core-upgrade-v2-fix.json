@@ -1,0 +1,81 @@
+{
+  "core": "core.genesisdemo354551.testnet",
+  "wasmBytes": 143611,
+  "wasmSha256": "ef698d41af82c2319594af341252fedec5ac4a4ef9308403fd87d5b12dbd2c80",
+  "before": {
+    "agent_count": 3,
+    "coreBalanceNear": 5.496722033880629,
+    "codeHash": "42xBf5E2Km5rUq5gK1Gqd9fKJq5NZPirG2v8Vb6bZgbQ"
+  },
+  "txs": {
+    "deploy": {
+      "hash": "a1545aeb73d62ee4d4259f701be0c3e0f01a82c098543e997810b5db1be1e48e",
+      "status": "Success"
+    },
+    "migrate": {
+      "status": "SKIPPED (--no-migrate: state already v2-shaped)"
+    }
+  },
+  "verification": {
+    "agent_count": 3,
+    "get_agent_genesis_gen_2": {
+      "token_id": "genesis-gen-2",
+      "owner_id": "gen2.genesisdemo354551.testnet",
+      "generation": 2,
+      "parent": "genesis-gen-1",
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "earned": "0",
+      "created_at": 1793863067986784300
+    },
+    "get_agent_genesis_gen_3": {
+      "token_id": "genesis-gen-3",
+      "owner_id": "gen3.genesisdemo354551.testnet",
+      "generation": 3,
+      "parent": "genesis-gen-2",
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "earned": "0",
+      "created_at": 1793863091092303400
+    },
+    "get_agent_genesis_visitor_1": {
+      "token_id": "genesis-visitor-1",
+      "owner_id": "otoyo4real.testnet",
+      "generation": 0,
+      "parent": "treasury",
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "earned": "0",
+      "created_at": 1793863108669632300
+    },
+    "get_listings": [
+      {
+        "token_id": "genesis-weak-2",
+        "seller": "genesisdemo354551.testnet",
+        "price": "1000000000000000000000",
+        "listed_at": 1793870949136375600
+      }
+    ],
+    "coreBalanceNear": 5.495638288164612,
+    "codeHash": "H7ZnqZW6s63KV7xhhz3BubDmnq3yKqjtuERHFHZgoMTm",
+    "note": "Code-only redeploy: state struct unchanged, so agent_count, agents, listings and frontiers must be exactly as before. get_listings may hold the stale listing from the pre-fix list (the token was returned to its seller) — the marketplace test re-lists it and the fixed receiver keeps it this time."
+  }
+}

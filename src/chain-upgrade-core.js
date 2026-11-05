@@ -2,10 +2,15 @@
 // Pattern: sign locally with near-api-js, broadcast via curl (near-api-js
 // RPC drops through this VM's proxy; curl succeeds).
 //
-// Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run]
+// Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate]
 //   wasm-path: the built v2 contract, e.g.
 //   contracts/genesis-core/target/near/genesis_core.wasm
 //   --dry-run: print the plan, sizes and costs; sign/broadcast nothing.
+//   --no-migrate: deploy the WASM only, do NOT call migrate(). Use this
+//     for a code-only fix on a contract whose state is ALREADY in the v2
+//     shape (migrate() reads a v1 state and would panic on v2 bytes).
+//     The state struct is unchanged by a return-value-only fix, so a plain
+//     redeploy keeps every agent, job, listing and frontier intact.
 //
 // Steps: deploy the v2 WASM to core.genesisdemo354551.testnet -> call
 // migrate() FIRST (it rewrites the v1 state into the v2 shape, keeping
@@ -69,7 +74,8 @@ function callFunction(id, method, args) {
 async function main() {
   const wasmPath = process.argv[2];
   const dryRun = process.argv.includes('--dry-run');
-  if (!wasmPath) throw new Error('Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run]');
+  const noMigrate = process.argv.includes('--no-migrate');
+  if (!wasmPath) throw new Error('Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate]');
   const wasm = fs.readFileSync(wasmPath);
   const crypto = require('crypto');
   const wasmSha = crypto.createHash('sha256').update(wasm).digest('hex');
@@ -87,16 +93,22 @@ async function main() {
   console.log(`WASM: ${wasmPath} (${wasm.length} bytes) sha256 ${wasmSha}`);
   console.log(`Core ${CORE_ID}: ${coreBal.toFixed(4)} NEAR, code_hash ${oldCodeHash}`);
   console.log(`Before upgrade: agent_count ${before.agent_count}.`);
-  console.log('Steps: deploy v2 WASM -> migrate() (first call, preserves agents/jobs/params) -> verify.');
+  console.log(noMigrate
+    ? 'Steps: deploy fixed WASM only (no migrate — state is already v2-shaped) -> verify.'
+    : 'Steps: deploy v2 WASM -> migrate() (first call, preserves agents/jobs/params) -> verify.');
   if (dryRun) { console.log('DRY RUN — nothing signed, nothing broadcast.'); return; }
   const coreKp = KeyPair.fromString(CORE_KEY.privateKey);
   const proof = { core: CORE_ID, wasmBytes: wasm.length, wasmSha256: wasmSha, before, txs: {} };
   proof.txs.deploy = await sendTx(CORE_ID, coreKp, CORE_ID, [
     transactions.deployContract(wasm),
   ], 'deploy v2 contract', dryRun);
-  proof.txs.migrate = await sendTx(CORE_ID, coreKp, CORE_ID, [
-    transactions.functionCall('migrate', {}, 100000000000000n, 0n),
-  ], 'migrate v1 -> v2', dryRun);
+  if (noMigrate) {
+    proof.txs.migrate = { status: 'SKIPPED (--no-migrate: state already v2-shaped)' };
+  } else {
+    proof.txs.migrate = await sendTx(CORE_ID, coreKp, CORE_ID, [
+      transactions.functionCall('migrate', {}, 100000000000000n, 0n),
+    ], 'migrate v1 -> v2', dryRun);
+  }
   proof.verification = {
     agent_count: callFunction(CORE_ID, 'agent_count', {}),
     get_agent_genesis_gen_2: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-gen-2' }),
@@ -105,10 +117,13 @@ async function main() {
     get_listings: callFunction(CORE_ID, 'get_listings', {}),
     coreBalanceNear: Number(viewAccount(CORE_ID).amount) / 1e24,
     codeHash: viewAccount(CORE_ID).code_hash,
-    note: 'agent_count must stay 3 and the three agents must be present — the migration preserves the registry. get_listings must be [] (empty) and get_frontier (checked separately) must be null.',
+    note: noMigrate
+      ? 'Code-only redeploy: state struct unchanged, so agent_count, agents, listings and frontiers must be exactly as before. get_listings may hold the stale listing from the pre-fix list (the token was returned to its seller) — the marketplace test re-lists it and the fixed receiver keeps it this time.'
+      : 'agent_count must stay 3 and the three agents must be present — the migration preserves the registry. get_listings must be [] (empty) and get_frontier (checked separately) must be null.',
   };
-  fs.writeFileSync('demo/core-upgrade-v2.json', JSON.stringify(proof, null, 2));
-  console.log('Wrote demo/core-upgrade-v2.json');
+  const proofFile = noMigrate ? 'demo/core-upgrade-v2-fix.json' : 'demo/core-upgrade-v2.json';
+  fs.writeFileSync(proofFile, JSON.stringify(proof, null, 2));
+  console.log(`Wrote ${proofFile}`);
   console.log(JSON.stringify(proof, null, 2));
 }
 main().catch(e => { console.error('FAILED', e); process.exit(1); });

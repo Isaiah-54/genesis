@@ -71,8 +71,14 @@ pub struct Listing { pub token_id: String, pub seller: AccountId, pub price: U12
   beats it; panics when a frontier exists and score <= best.
 - `nft_on_transfer(sender_id: AccountId, previous_owner_id: AccountId, token_id: String, msg: String) -> PromiseOrValue<bool>` —
   NEP-171 receiver callback. `msg` is the price in yoctoNEAR as a decimal
-  string. Records the listing (seller = previous_owner_id), returns true.
-  Returns false (rejects the transfer) when the msg is not a valid price.
+  string. Records the listing (seller = previous_owner_id). Return value
+  is INVERTED vs the plain NEP-171 reading: near-contract-standards 5.x
+  reads the bool as `must_revert`, so the Core returns `false` to KEEP
+  the token (good listing) and `true` to send it back (bad price).
+  Returning `true` on a good listing makes the NFT contract hand the
+  token straight back to the seller. A re-list overwrites a stale
+  listing (a valid double-list is impossible — only the token's owner
+  can call `nft_transfer_call`).
 - `buy_nft(token_id: String)` — payable; attached deposit must equal the
   listing price exactly. Transfers the NFT to the buyer (cross-contract
   call), then a private callback pays the seller 95% and the Core owner

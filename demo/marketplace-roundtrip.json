@@ -1,0 +1,50 @@
+{
+  "token": "genesis-weak-2",
+  "priceNear": "0.001",
+  "txs": {
+    "list1": {
+      "hash": "f3dab5a723dd4095776cc7f2ba32774267ff4df62965c1d67d59ed4cca127eb8",
+      "status": "Success"
+    },
+    "buy1": {
+      "hash": "6ad19e87f511565aee80fed06cd157b9351483505a7ce6b7e8fd332325209ea6",
+      "status": "Success"
+    },
+    "list2": {
+      "hash": "692deaaa5caa685c08c7a7569ce5a5e078dd9704bd4f191283589ce79c041d3a",
+      "status": "Success"
+    },
+    "buy2": {
+      "hash": "27b424f2f74ad4e413689748675437ec05ad64f2454b4cf37f636c90baf253e7",
+      "status": "Success"
+    }
+  },
+  "checks": {
+    "ownerBefore": "genesisdemo354551.testnet",
+    "treasuryBefore": "0.7659",
+    "gen2Before": "0.5394",
+    "listingsAfterList1": [
+      {
+        "token_id": "genesis-weak-2",
+        "seller": "genesisdemo354551.testnet",
+        "price": "1000000000000000000000",
+        "listed_at": 1793871469556699600
+      }
+    ],
+    "ownerAfterBuy1": "gen2.genesisdemo354551.testnet",
+    "listingsAfterBuy1": [],
+    "treasuryAfterBuy1": "0.7662",
+    "listingsAfterList2": [
+      {
+        "token_id": "genesis-weak-2",
+        "seller": "gen2.genesisdemo354551.testnet",
+        "price": "1000000000000000000000",
+        "listed_at": 1793871513503014700
+      }
+    ],
+    "ownerAfterBuy2": "genesisdemo354551.testnet",
+    "listingsAfterBuy2": [],
+    "treasuryAfter": "0.7644",
+    "gen2After": "0.5377"
+  }
+}

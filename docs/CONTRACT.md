@@ -34,7 +34,13 @@ v2 adds two things to the same account (`core.genesisdemo354551.testnet`):
   95% and the Core owner (treasury) a 5% fee; a failed NFT transfer
   refunds the buyer in full. `nft_on_transfer` only accepts calls from
   `nft.primitives.testnet`, so a listing cannot be faked by calling it
-  directly. The marketplace page is `marketplace.html` (+ `marketplace.js`).
+  directly. Its return value is INVERTED vs the plain NEP-171 reading:
+  near-contract-standards 5.x reads the bool as `must_revert`, so the
+  Core returns `false` to keep a good listing's token in escrow and
+  `true` to send a bad-priced token back to its seller (the first v2
+  deploy returned `true` on a good listing and the NFT contract handed
+  every listed token straight back — fixed in the redeploy, see below).
+  The marketplace page is `marketplace.html` (+ `marketplace.js`).
 - **Upgrade path.** v2 deploys over v1 on the same account, then
   `migrate()` (first call after the redeploy) rewrites the v1 state into
   the v2 shape, keeping every agent, job and parameter. Unit tests prove
@@ -42,6 +48,25 @@ v2 adds two things to the same account (`core.genesisdemo354551.testnet`):
   Upgrade script: `node src/chain-upgrade-core.js <wasm> [--dry-run]`.
   v2 WASM: 143,490 bytes, sha256
   `de36d7535fc44cdf99665e5db4f507a5a4a2214f0c731c32af129abbf5b49f16`.
+  **Receiver fix, same day:** the first v2 deploy returned `true` from
+  `nft_on_transfer` on a good listing, which near-contract-standards
+  reads as "return the token", so every listed token went straight back
+  to its seller and `buy_nft` failed with "Unauthorized". Fixed by
+  returning `false` on a good listing (keep the token) and `true` on a
+  bad price (return it), plus allowing a re-list to overwrite a stale
+  listing (a valid double-list is impossible — only the token's owner
+  can call `nft_transfer_call`, and a validly listed token is owned by
+  the Core). Redeployed with `--no-migrate` (state was already v2-shaped;
+  `migrate()` would panic on v2 bytes): final WASM 143,611 bytes, sha256
+  `ef698d41af82c2319594af341252fedec5ac4a4ef9308403fd87d5b12dbd2c80`,
+  deploy tx `a1545aeb73d62ee4d4259f701be0c3e0f01a82c098543e997810b5db1be1e48e`,
+  code hash `H7ZnqZW6s63K…`, agent_count still 3. Live round-trip verified
+  (proof `demo/marketplace-roundtrip.json`): list → buy → list back →
+  buy back → delist, all Success, token back with the treasury, listings
+  empty. Unit tests now 8 (the stale-listing overwrite is covered).
+  The first labinius payment through the frontier is also live (proof
+  `demo/frontier-first-payment.json`): 3 runs, median score 483, frontier
+  set to 483 for that job definition, gen2 paid 0.01 NEAR.
 
 ## Current working product (v2/v3)
 

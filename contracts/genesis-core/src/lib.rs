@@ -284,6 +284,14 @@ impl Contract {
     /// this contract (escrow) until it is bought or delisted.
     /// Only calls from the NFT contract are accepted; anything else panics,
     /// so a listing cannot be faked by calling this method directly.
+    ///
+    /// Return value — INVERTED vs the plain NEP-171 reading, and this is
+    /// what near-contract-standards 5.x actually implements in
+    /// `nft_resolve_transfer` (the bool is read as `must_revert`): return
+    /// `false` to KEEP the token here (listing accepted), return `true` to
+    /// send it back to the sender (listing rejected). Returning `true` on
+    /// a good listing makes the NFT contract hand the token straight back
+    /// to the seller, so the escrow never holds it.
     pub fn nft_on_transfer(
         &mut self,
         sender_id: AccountId,
@@ -300,12 +308,17 @@ impl Contract {
         let _ = sender_id;
         let price: u128 = match msg.trim().parse() {
             Ok(p) if p > 0 => p,
-            _ => return PromiseOrValue::Value(false),
+            // Bad price: return the token to the sender (reject the listing).
+            _ => return PromiseOrValue::Value(true),
         };
-        assert!(
-            self.listings.get(&token_id).is_none(),
-            "Token is already listed"
-        );
+        // No "already listed" guard here on purpose: the insert below
+        // overwrites a STALE listing (one whose token was returned to its
+        // seller, e.g. by a rejected transfer). A valid double-list is
+        // impossible — the NFT contract only lets the token's owner call
+        // `nft_transfer_call`, and a token that is validly listed is owned
+        // by this contract, not by its seller — so the only way this runs
+        // for an already-listed token is when the seller still owns it,
+        // which is exactly the stale case the overwrite repairs.
         self.listings.insert(
             &token_id,
             &Listing {
@@ -315,7 +328,8 @@ impl Contract {
                 listed_at: env::block_timestamp(),
             },
         );
-        PromiseOrValue::Value(true)
+        // Listing accepted: keep the token in escrow (false = do not return).
+        PromiseOrValue::Value(false)
     }
 
     /// Buy a listed NFT. The caller must attach exactly the listing price.
@@ -653,7 +667,9 @@ mod tests {
             "genesis-gen-2".to_string(),
             "1000000000000000000000000".to_string(),
         );
-        assert!(matches!(accepted, PromiseOrValue::Value(true)));
+        // Accepted listings return false: false means "keep the token here"
+        // (near-contract-standards reads the bool as `must_revert`).
+        assert!(matches!(accepted, PromiseOrValue::Value(false)));
         let listing = c.get_listing("genesis-gen-2".to_string()).expect("listed");
         assert_eq!(listing.seller, owner());
         assert_eq!(listing.price.0, 1_000_000_000_000_000_000_000_000);
@@ -670,8 +686,34 @@ mod tests {
             "genesis-gen-2".to_string(),
             "not-a-price".to_string(),
         );
-        assert!(matches!(accepted, PromiseOrValue::Value(false)));
+        // A bad price returns true: true means "return the token to the sender".
+        assert!(matches!(accepted, PromiseOrValue::Value(true)));
         assert!(c.get_listings().is_empty());
+    }
+
+    #[test]
+    fn nft_on_transfer_overwrites_a_stale_listing() {
+        testing(nft_contract());
+        let mut c = empty_contract();
+        let first = c.nft_on_transfer(
+            owner(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "1000".to_string(),
+        );
+        assert!(matches!(first, PromiseOrValue::Value(false)));
+        // Re-listing the same token (the stale case: the seller still owns
+        // it) overwrites the old price instead of panicking.
+        let second = c.nft_on_transfer(
+            owner(),
+            owner(),
+            "genesis-gen-2".to_string(),
+            "2000".to_string(),
+        );
+        assert!(matches!(second, PromiseOrValue::Value(false)));
+        let listing = c.get_listing("genesis-gen-2".to_string()).expect("listed");
+        assert_eq!(listing.price.0, 2000);
+        assert_eq!(c.get_listings().len(), 1);
     }
 
     #[test]

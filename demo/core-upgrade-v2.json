@@ -1,0 +1,75 @@
+{
+  "core": "core.genesisdemo354551.testnet",
+  "wasmBytes": 143490,
+  "wasmSha256": "de36d7535fc44cdf99665e5db4f507a5a4a2214f0c731c32af129abbf5b49f16",
+  "before": {
+    "agent_count": 3,
+    "coreBalanceNear": 5.499047690923244,
+    "codeHash": "2C9Uhyha373Tecz7idnkuv5u82L6cc8kgYiAcB4Gmc8L"
+  },
+  "txs": {
+    "deploy": {
+      "hash": "ebc4ced02cf398725c08e84660512c36d4360d01fc4d971cacefcbfd0ef7c4c8",
+      "status": "Success"
+    },
+    "migrate": {
+      "hash": "d7e8d76fb71c6baeb31d913e5b2fbba238621c824540cf75b9c570d294e27b08",
+      "status": "Success"
+    }
+  },
+  "verification": {
+    "agent_count": 3,
+    "get_agent_genesis_gen_2": {
+      "token_id": "genesis-gen-2",
+      "owner_id": "gen2.genesisdemo354551.testnet",
+      "generation": 2,
+      "parent": "genesis-gen-1",
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "earned": "0",
+      "created_at": 1793863067986784300
+    },
+    "get_agent_genesis_gen_3": {
+      "token_id": "genesis-gen-3",
+      "owner_id": "gen3.genesisdemo354551.testnet",
+      "generation": 3,
+      "parent": "genesis-gen-2",
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "earned": "0",
+      "created_at": 1793863091092303400
+    },
+    "get_agent_genesis_visitor_1": {
+      "token_id": "genesis-visitor-1",
+      "owner_id": "otoyo4real.testnet",
+      "generation": 0,
+      "parent": "treasury",
+      "skill": {
+        "speed": 1,
+        "quality": 1,
+        "cost_eff": 1
+      },
+      "status": "Alive",
+      "jobs_done": 0,
+      "consecutive_fails": 0,
+      "earned": "0",
+      "created_at": 1793863108669632300
+    },
+    "get_listings": [],
+    "coreBalanceNear": 5.497806414931539,
+    "codeHash": "FxS1csfU2w8nAYMD8YcDZNH9yMVUZzQB2MZL9phtjf6V",
+    "note": "agent_count must stay 3 and the three agents must be present — the migration preserves the registry. get_listings must be [] (empty) and get_frontier (checked separately) must be null."
+  }
+}
