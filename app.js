@@ -1,6 +1,10 @@
 /**
  * Genesis frontend — real wallet connect + nft_mint on testnet
- * Uses @hot-labs/near-connect (Meteor, MyNearWallet, HOT, and others)
+ * Uses @fastnear/wallet 2.5.0 (Meteor, MyNearWallet, HOT, and others).
+ * NOTE: in @fastnear/wallet, `nearWallet.accountId` is a FUNCTION, not a
+ * string — never assign it as the account id (doing so prints the function
+ * source into the button). The connected account id is the STRING returned
+ * by connect()/restore(), or by calling accountId({ network }).
  */
 (function () {
   const NFT_CONTRACT = 'nft.primitives.testnet';
@@ -8,11 +12,26 @@
   const MINT_DEPOSIT = '100000000000000000000000'; // 0.1 NEAR in yocto
   const GAS = '300000000000000'; // 300 TGas
 
-  let connector = null;
-  let wallet = null;
   let accountId = null;
 
   function $(id) { return document.getElementById(id); }
+
+  function fastnear() {
+    if (typeof window.nearWallet === 'undefined') {
+      throw new Error('FastNear wallet library not loaded. Check the script tag.');
+    }
+    return window.nearWallet;
+  }
+
+  // The connected account id is always a string. Returns null otherwise.
+  function currentAccountId(nw) {
+    try {
+      const id = nw.accountId({ network: NETWORK });
+      return typeof id === 'string' && id ? id : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   function setStatus(msg, isError) {
     const el = $('walletStatus');
@@ -40,60 +59,24 @@
     else setStatus('Use Connect wallet in the top bar. Meteor and MyNearWallet are supported.');
   }
 
-  async function ensureConnector() {
-    if (connector) return connector;
-    if (typeof NearConnector === 'undefined' && typeof window.NearConnector === 'undefined') {
-      throw new Error('NEAR Connect library not loaded. Check the script tag.');
-    }
-    const NearConnectorCtor = window.NearConnector || NearConnector;
-    connector = new NearConnectorCtor({
-      network: NETWORK,
-      features: {
-        signAndSendTransaction: true,
-        signInWithoutAddKey: true,
-      },
-    });
-    connector.on('wallet:signIn', async (payload) => {
-      try {
-        wallet = payload.wallet || (await connector.wallet());
-        accountId = (payload.accounts && payload.accounts[0] && payload.accounts[0].accountId) || null;
-        if (!accountId && wallet && wallet.getAccounts) {
-          const accounts = await wallet.getAccounts();
-          accountId = accounts[0] && accounts[0].accountId;
-        }
-        updateWalletButtons();
-      } catch (e) {
-        console.error(e);
-        setStatus('Sign-in event error: ' + (e.message || e), true);
-      }
-    });
-    connector.on('wallet:signOut', () => {
-      wallet = null;
-      accountId = null;
-      updateWalletButtons();
-    });
-    return connector;
-  }
-
   async function connectWallet() {
     try {
-      setStatus('Opening wallet selector…');
-      const c = await ensureConnector();
+      const nw = fastnear();
       if (accountId) {
-        try {
-          const w = wallet || (await c.wallet());
-          await c.disconnect(w);
-        } catch (_) {
-          wallet = null;
-          accountId = null;
-        }
+        try { await nw.disconnect(); } catch (_) {}
+        accountId = null;
         updateWalletButtons();
         return;
       }
-      const connectedWallet = await c.connect();
-      wallet = connectedWallet;
-      const accounts = await connectedWallet.getAccounts();
-      accountId = accounts[0] && accounts[0].accountId;
+      setStatus('Opening wallet selector…');
+      const result = await nw.connect({ network: NETWORK });
+      const id =
+        (result && typeof result.accountId === 'string' && result.accountId) ||
+        currentAccountId(nw);
+      if (typeof id !== 'string' || !id) {
+        throw new Error('Wallet connected but returned no account id.');
+      }
+      accountId = id;
       updateWalletButtons();
     } catch (e) {
       console.error(e);
@@ -112,7 +95,7 @@
     const gen = ($('mintGen') && $('mintGen').value) || '0';
     const parent = ($('mintParent') && $('mintParent').value) || 'treasury';
 
-    if (!accountId || !wallet) {
+    if (!accountId) {
       if (status) status.textContent = 'Connect a wallet first.';
       return;
     }
@@ -147,27 +130,26 @@
     };
 
     try {
-      const w = wallet || (await connector.wallet());
-      const result = await w.signAndSendTransaction({
+      const nw = fastnear();
+      const result = await nw.sendTransaction({
         receiverId: NFT_CONTRACT,
         actions: [
           {
             type: 'FunctionCall',
-            params: {
-              methodName: 'nft_mint',
-              args: {
-                token_id: tokenId,
-                receiver_id: accountId,
-                token_metadata: tokenMetadata,
-              },
-              gas: GAS,
-              deposit: MINT_DEPOSIT,
+            methodName: 'nft_mint',
+            args: {
+              token_id: tokenId,
+              receiver_id: accountId,
+              token_metadata: tokenMetadata,
             },
+            gas: GAS,
+            deposit: MINT_DEPOSIT,
           },
         ],
       });
 
       const hash =
+        (result && result.hash) ||
         (result && result.transaction && result.transaction.hash) ||
         (result && result.transaction_outcome && result.transaction_outcome.id) ||
         (result && result.txHash) ||
@@ -330,22 +312,15 @@
 
   window.addEventListener('load', async () => {
     try {
-      await ensureConnector();
-      if (connector.wallet) {
-        try {
-          const w = await connector.wallet();
-          if (w) {
-            wallet = w;
-            const accounts = await w.getAccounts();
-            if (accounts && accounts[0]) {
-              accountId = accounts[0].accountId;
-              updateWalletButtons();
-            }
-          }
-        } catch (_) {}
+      const nw = fastnear();
+      const restored = await nw.restore();
+      const id = restored && typeof restored.accountId === 'string' ? restored.accountId : null;
+      if (id) {
+        accountId = id;
+        updateWalletButtons();
       }
     } catch (e) {
-      console.warn('NEAR Connect init:', e);
+      console.warn('FastNear restore:', e);
       setStatus('Wallet library loading… If this persists, hard-refresh the page.', true);
     }
   });
