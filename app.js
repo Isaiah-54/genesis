@@ -799,6 +799,190 @@
     });
   }
 
+  // ─── Fund an agent via NEAR Intents (mainnet) ───
+  // The widget talks only to the Genesis API routes (/api/intents-quote,
+  // /api/intents-status), never to 1Click directly, so the optional
+  // partner JWT stays server-side. A dry quote is a price preview only.
+  // A live quote returns a deposit address; the user sends the source
+  // tokens to it from their own wallet, and the solver delivers wNEAR
+  // to the Genesis mainnet funding account. Mainnet only — 1Click has
+  // no testnet, and quoting into NEAR was unavailable on 2026-11-05,
+  // so the widget shows 1Click's real answer (including that error)
+  // and never invents a quote.
+  let fundTokens = [];
+  let fundPollTimer = null;
+
+  async function loadFundTokens() {
+    const sel = $('fundAsset');
+    if (!sel) return;
+    try {
+      const res = await fetch('/api/intents-quote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token_id: 'genesis-gen-3', originAsset: 'nep141:wrap.near', amount: '1', dry: true }),
+      });
+      // The route needs a valid origin asset; instead fetch the token
+      // list through a dry quote probe is not supported, so fall back
+      // to a small curated list of liquid 1Click assets (verified in
+      // GET /v0/tokens on 2026-11-05). The server validates the asset
+      // against the live list on every quote.
+      void res;
+    } catch (_) {}
+    fundTokens = [
+      { assetId: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near', symbol: 'USDC', blockchain: 'eth', decimals: 6, label: 'USDC on Ethereum' },
+      { assetId: 'nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near', symbol: 'USDC', blockchain: 'arb', decimals: 6, label: 'USDC on Arbitrum' },
+      { assetId: 'nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near', symbol: 'USDC', blockchain: 'base', decimals: 6, label: 'USDC on Base' },
+      { assetId: 'nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near', symbol: 'USDC', blockchain: 'sol', decimals: 6, label: 'USDC on Solana' },
+      { assetId: 'nep141:eth.omft.near', symbol: 'ETH', blockchain: 'eth', decimals: 18, label: 'ETH on Ethereum' },
+      { assetId: 'nep141:sol.omft.near', symbol: 'SOL', blockchain: 'sol', decimals: 9, label: 'SOL on Solana' },
+    ];
+    sel.innerHTML = fundTokens.map((t) =>
+      '<option value="' + esc(t.assetId) + '">' + esc(t.label) + '</option>').join('');
+  }
+
+  function fundQuoteText(q) {
+    if (!q.ok) return 'No quote: ' + (q.error || 'unknown error') +
+      (q.correlationId ? ' (ref ' + q.correlationId + ')' : '') +
+      ' — NEAR Intents could not quote this pair right now. Try a different token, or try again later. Nothing was charged.';
+    let s = 'You send ' + esc(q.amountInFormatted || '') + ' ' + esc(q.originSymbol || '') +
+      ' → agent receives ~' + esc(q.amountOutFormatted || '') + ' NEAR (wNEAR)' +
+      (q.amountOutUsd ? ' (≈ $' + esc(q.amountOutUsd) + ')' : '') +
+      (q.timeEstimateSeconds ? ' · ~' + esc(String(q.timeEstimateSeconds)) + 's' : '');
+    if (q.depositAddress) {
+      s += '\nDeposit address (' + esc(q.originBlockchain || '') + '): ' + q.depositAddress +
+        '\nSend exactly ' + esc(q.amountInFormatted || '') + ' ' + esc(q.originSymbol || '') +
+        ' before ' + esc(q.deadline || '') + '. The solver delivers wNEAR to the Genesis funding account.';
+      if (q.depositMemo) s += '\nMemo (required): ' + esc(q.depositMemo);
+    }
+    return s;
+  }
+
+  async function requestFundQuote(live) {
+    const out = $('fundQuoteOut');
+    const status = $('fundStatus');
+    const tokenId = ($('fundToken') && $('fundToken').value || '').trim();
+    const asset = ($('fundAsset') && $('fundAsset').value || '').trim();
+    const amount = ($('fundAmount') && $('fundAmount').value || '').trim();
+    const refundTo = ($('fundRefund') && $('fundRefund').value || '').trim();
+    if (!tokenId) { if (status) status.textContent = 'Enter an agent token id.'; return; }
+    if (!asset) { if (status) status.textContent = 'Pick a token to send.'; return; }
+    if (out) out.textContent = live ? 'Requesting a live quote…' : 'Requesting a price preview…';
+    if (status) status.textContent = '';
+    try {
+      const res = await fetch('/api/intents-quote', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token_id: tokenId, originAsset: asset, amount, refundTo, dry: !live }),
+      });
+      const q = await res.json();
+      if (out) out.textContent = fundQuoteText(q);
+      if (q.ok && live && q.depositAddress) {
+        if (status) status.textContent = 'Live quote ready. Send the tokens, then this page polls the swap status every ~15s.';
+        startFundPolling(q.depositAddress, tokenId);
+      } else if (q.ok && !live) {
+        if (status) status.textContent = 'Dry quote — price preview only. Press "Get live quote" for a deposit address.';
+      } else if (!q.ok && status) {
+        status.textContent = 'Quote unavailable. See above.';
+      }
+    } catch (e) {
+      if (out) out.textContent = 'Quote failed: ' + (e.message || e);
+    }
+  }
+
+  function startFundPolling(depositAddress, tokenId) {
+    if (fundPollTimer) clearInterval(fundPollTimer);
+    let tries = 0;
+    fundPollTimer = setInterval(async () => {
+      tries++;
+      if (tries > 120) { clearInterval(fundPollTimer); return; } // ~30 min
+      try {
+        const res = await fetch('/api/intents-status?depositAddress=' + encodeURIComponent(depositAddress) + '&token_id=' + encodeURIComponent(tokenId));
+        const s = await res.json();
+        const status = $('fundStatus');
+        if (!s.ok) { if (status) status.textContent = 'Status check failed: ' + (s.error || ''); return; }
+        if (status) status.textContent = 'Swap status: ' + s.status + (s.note ? ' — ' + s.note : '');
+        if (s.status === 'SUCCESS') {
+          clearInterval(fundPollTimer);
+          const budget = $('fundBudget');
+          if (budget) {
+            budget.textContent = 'Inference budget funded via Intents: ' +
+              (s.funding && s.funding.amountOutFormatted ? s.funding.amountOutFormatted + ' NEAR (mainnet)' : 'funded — see explorer link') +
+              ' for ' + tokenId + '.';
+            try {
+              const key = 'genesis-intents-budget';
+              const store = JSON.parse(localStorage.getItem(key) || '{}');
+              store[tokenId] = { amount: (s.funding && s.funding.amountOutFormatted) || null, at: new Date().toISOString() };
+              localStorage.setItem(key, JSON.stringify(store));
+            } catch (_) {}
+          }
+        } else if (s.status === 'REFUNDED' || s.status === 'FAILED') {
+          clearInterval(fundPollTimer);
+        }
+      } catch (_) {}
+    }, 15000);
+  }
+
+  function loadFundBudget() {
+    const budget = $('fundBudget');
+    if (!budget) return;
+    try {
+      const store = JSON.parse(localStorage.getItem('genesis-intents-budget') || '{}');
+      const tokenId = ($('fundToken') && $('fundToken').value || '').trim();
+      if (tokenId && store[tokenId]) {
+        budget.textContent = 'Inference budget funded via Intents: ' +
+          (store[tokenId].amount ? store[tokenId].amount + ' NEAR (mainnet)' : 'funded') +
+          ' for ' + tokenId + ' (recorded ' + store[tokenId].at + ').';
+      }
+    } catch (_) {}
+    try {
+      fetch('/demo/intents-funding.json').then((r) => r.json()).then((log) => {
+        const tokenId = ($('fundToken') && $('fundToken').value || '').trim();
+        const entry = (log.fundings || []).filter((f) => f.token_id === tokenId).pop();
+        if (entry && budget && !budget.textContent) {
+          budget.textContent = 'Inference budget funded via Intents: ' +
+            (entry.amountOutFormatted ? entry.amountOutFormatted + ' NEAR (mainnet)' : 'funded') +
+            ' for ' + tokenId + '.';
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  // Fill every .intents-budget[data-token] element (CV page, and any
+  // listing card that carries one) from the funding log + localStorage.
+  // The durable proof is the 1Click status + mainnet explorer link;
+  // this display is best-effort and says so when nothing is recorded.
+  function loadIntentsBudgets() {
+    const els = document.querySelectorAll('.intents-budget[data-token]');
+    if (!els.length) return;
+    let store = {};
+    try { store = JSON.parse(localStorage.getItem('genesis-intents-budget') || '{}'); } catch (_) {}
+    const apply = (log) => {
+      els.forEach((el) => {
+        const token = el.getAttribute('data-token');
+        const entry = (log.fundings || []).filter((f) => f.token_id === token).pop();
+        const local = store[token];
+        if (entry) {
+          el.textContent = 'Funded via Intents: ' +
+            (entry.amountOutFormatted ? entry.amountOutFormatted + ' NEAR (mainnet)' : 'funded') +
+            (entry.destinationTxHash ? ' · ' + entry.destinationTxHash.slice(0, 12) + '…' : '');
+        } else if (local) {
+          el.textContent = 'Funded via Intents: ' +
+            (local.amount ? local.amount + ' NEAR (mainnet)' : 'funded') + ' (this browser)';
+        }
+      });
+    };
+    apply({ fundings: [] });
+    fetch('/demo/intents-funding.json').then((r) => r.json()).then(apply).catch(() => {});
+  }
+
+  function wireFundAgent() {
+    const q = $('fundQuoteBtn');
+    if (q) q.addEventListener('click', () => requestFundQuote(false));
+    const l = $('fundLiveBtn');
+    if (l) l.addEventListener('click', () => requestFundQuote(true));
+    loadFundTokens();
+    loadFundBudget();
+    loadIntentsBudgets();
+  }
+
   function wireWalletButtons() {
     document.querySelectorAll('#walletBtn').forEach((btn) => {
       btn.addEventListener('click', connectWallet);
@@ -812,6 +996,7 @@
   wireAgentJobButton();
   wireJobBoard();
   wireEvolve();
+  wireFundAgent();
   updateWalletButtons();
 
   window.addEventListener('load', async () => {

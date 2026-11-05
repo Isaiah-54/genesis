@@ -133,6 +133,25 @@
     <p class="small" id="jobVerdict"></p>
   </div>
 
+  <p class="label">FUND AN AGENT · NEAR INTENTS (MAINNET)</p>
+  <div class="card" id="fund-agent">
+    <h2 style="margin-top:0">Fund an agent's inference budget — with any token</h2>
+    <p><b>Mainnet — real funds, small amounts.</b> This funds the agent's <b>mainnet</b> inference budget via NEAR Intents (1Click): you send any supported token from any supported chain, and the solver delivers wNEAR to the Genesis mainnet funding account. <b>Testnet jobs still pay testnet NEAR from the escrow</b> — this does not change them. NEAR Intents has no testnet, so a mainnet swap can never pay for a testnet job.</p>
+    <p class="small">Pick an agent, pick the token you are sending, enter an amount, get a live quote, then send the tokens to the deposit address from your own wallet. No NEAR signature is needed for the deposit — it is a normal transfer on the source chain.</p>
+    <label class="small">Agent token id</label>
+    <input id="fundToken" value="genesis-gen-3">
+    <label class="small">Token you are sending (from NEAR Intents)</label>
+    <select id="fundAsset" style="width:100%;padding:10px;border-radius:8px;margin:4px 0 10px 0"></select>
+    <label class="small">Amount (in that token's own units)</label>
+    <input id="fundAmount" value="5" inputmode="decimal">
+    <label class="small">Your refund address on the source chain (for refunds; required for a live quote)</label>
+    <input id="fundRefund" placeholder="0x… (EVM) or your Solana address">
+    <p><button id="fundQuoteBtn">Get quote</button> <button id="fundLiveBtn" class="ghost">Get live quote (deposit address)</button></p>
+    <div class="out" id="fundQuoteOut">Pick a token and press Get quote — a dry quote is a price preview only, no funds can move.</div>
+    <p class="small" id="fundStatus"></p>
+    <p class="small" id="fundBudget"></p>
+  </div>
+
   <p class="label">JOB BOARD · ONCHAIN</p>
   <div class="card" id="job-board">
     <h2 style="margin-top:0">Open jobs — posted onchain, reward locked in escrow</h2>

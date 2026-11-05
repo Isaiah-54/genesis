@@ -27,6 +27,8 @@ Built for **NEAR HACKATHON: Build Beyond Boundaries** (1–14 Nov 2026).
 | Breeding | Live. Breed two living agents into a child (generation = max(parent gens) + 1, skills = parents' average + mutation, both parents recorded) |
 | Job board | Live onchain. The site board reads the Core's `get_jobs` and posts jobs from a connected wallet (reward locked as escrow) |
 | Verifiable inference | Wired. The worker tries NEAR AI Cloud first (hardware attestation) when `NEAR_AI_API_KEY` is set; until Isaiah sets his own key it falls back to Pollinations |
+| NEAR Intents funding | Live (widget). Fund an agent's **mainnet** inference budget with any token via 1Click — see `docs/INTENTS.md`. Mainnet-only (1Click has no testnet); quoting into NEAR was unavailable on 2026-11-05, so the widget shows 1Click's real answer and never fakes a quote. Needs the funding account (`INTENTS_FUNDING_ACCOUNT` in Vercel env) before live quotes work. |
+| x402 premium CV | Live. `GET /api/agent-premium?token_id=<agent>` returns 402 with an x402 v2 payment requirement (0.01 testnet USDC, `near:testnet`); pay, retry with the tx hash, and the payment is verified onchain before the premium CV is served. See `docs/X402.md`. |
 
 Live balances: gen2 0.5477 NEAR, gen3 **0.52 NEAR** (0.51 + 0.01 arena win), otoyo4real.testnet 1.0017 NEAR, weak2 (dead agent) 0.3496 NEAR. Three early tokens (genesis-gen-0, genesis-gen-1, genesis-gen-5-weak) are onchain but locked — their subaccount keys were never saved, so they are showcase tokens, not working agents.
 
@@ -56,7 +58,7 @@ node src/cv.js genesis-gen-3
 node src/league.js
 node src/jobs-board.js
 ```
-→ Current league standings (gen3 leads gen2, both 1W-1L) and the open job board.
+→ Current league standings (gen3 leads 3W-1L, gen2 1W-3L) and the open job board.
 
 ```sh
 node src/cli.js token genesis-gen-2
@@ -167,14 +169,14 @@ Inspired by Illia Polosukhin's AI Tamagotchi (NFT pets with a balance that pays 
 * Every entered agent works the same job with the real LLM worker. The arena scores each output with the **strict verifier** (every keyword in a sentence of ≥8 words, <30% copied, ≥3 sentences), **3 fresh runs per contestant, all must pass, median score counts**, and the winner is paid through the Core escrow **only if the median beats the onchain frontier** — the same bar as a paid job. If nobody passes, or the winner does not beat the frontier, nobody is paid. The arena is now aligned with the paid-job bar.
 * Arena run 1 (2026-11-04) exposed a flaw and it is kept on record: both agents returned byte-identical outputs (same prompt, same model), so gen2 won only on the earliest-entry tie-break, payment tx 1e9bec6f0ad20ff20fee8220d2a1ae4c57c365240741f5634ca15553665d7efa. Arena run 2 fixed it with a different angle per contestant, and the competition became real: gen2 68 words, score 103.40; gen3 140 words, score 107.00; winner gen3, paid 0.01 NEAR, tx e4010000e75a4a471e601030fae4f1f5d66b95fe0747ec4c83ca0fae359289da (proof in demo/arena-run.json). Gen3 itself was born for the arena: subaccount funded 0.5 NEAR, token genesis-gen-3 minted with traits in extra (generation 3, parent genesis-gen-2, alive).
 * Arena run 3 (2026-11-05, strict verifier + median of 3 + frontier): gen2 PASS, scores [453, 453, 453], median 453; gen3 PASS, scores [554, 554, 554], median 554; winner gen3, paid 0.01 NEAR through the Core escrow, post tx cbce85d8f119b946bb4b64275c2b627d60156e3f5e2e10375f4f46c8861a984f, pay tx 9d46e4b1c6400e0c7caf3acd622669b2267a20e84690aef3913900574cbc60b1. The frontier for that job is now **554 (gen3)**, and gen3 has **1 win** (2 more to evolve to gen 4). Proof in demo/arena-run.json; the match is appended to demo/league.json.
-* League standings (verified 2026-11-05, `demo/league.json`): gen3 leads 2W-1L, gen2 1W-2L. Best scores: gen3 554 (run 3), gen2 453 (run 3).
+* League standings (verified 2026-11-05, `demo/league.json`): gen3 leads 3W-1L, gen2 1W-3L. Best scores: gen3 554 (run 3), gen2 453 (run 3). Arena earnings: gen3 0.02 NEAR, gen2 0.01 NEAR.
 
 ## Use cases (each labelled honestly: built, next, or needs something that does not exist yet)
 
 Each one uses the same Genesis mechanics — born as an NFT, works, gets verified, earns, reproduces or dies.
 
 1. **Freelance swarm for hire — BUILT.** Post a job on the open board, agents compete in the arena, winner takes the pay. Use it for research, summarising, briefing — any job a verifier can check.
-2. **Agent league (Fight Night) — BUILT.** A leaderboard from arena results (`demo/league.json`, `node src/cli.js league`): gen3 leads on best score (107.00) over gen2 (103.40), both 1W-1L, 0.01 NEAR arena earnings each. Champions reproduce, losers die, spectators watch the live dashboard.
+2. **Agent league (Fight Night) — BUILT.** A leaderboard from arena results (`demo/league.json`, `node src/cli.js league`): gen3 leads on best score (554) over gen2 (453), gen3 3W-1L, gen2 1W-3L, arena earnings 0.02 / 0.01 NEAR. Champions reproduce, losers die, spectators watch the live dashboard.
 3. **Buy and sell agents — BUILT.** The marketplace is live (see above): list an agent NFT, buy a proven one, delist any time. The escrow and the 5% treasury fee are onchain.
 4. **Breeding — NEXT.** Buy two proven agents and breed them into a child that combines their skills. Today reproduction is single-parent mutation only; two-parent breeding is not built yet.
 5. **Portable agent CV (hiring passport) — BUILT.** The NFT itself is the CV: parents, generation, jobs, earnings, all onchain, portable across platforms instead of a profile anyone can fake. `node src/cv.js genesis-gen-3` prints one; the website has a CV page (`cv.html`).
@@ -197,4 +199,4 @@ Each one uses the same Genesis mechanics — born as an NFT, works, gets verifie
 * Payment protection is now two-layer: the per-account cap (0.05 NEAR, read from the Core's `get_paid_to`) and the treasury floor (0.1 NEAR, read from the chain) both stop a payment before it is posted, and both fail closed if the read fails. Dedup is still per output hash, and the frontier still makes repeat payment on the same job progressively harder.
 * Evolution counts wins only (paid jobs), not a streak or a win rate — the Core never sees a failed attempt, so "consecutive wins" cannot be verified onchain today. A streak would need the verifier to report fails to the Core too.
 * The marketplace lists any token on the shared NFT contract, not only Genesis agent tokens — a listing's gen card is derived from the token's traits, and a non-Genesis token shows as gen 0.
-* No cross-chain earning yet. Chain Signatures / Intents are the stretch, and the README will say exactly which chains are covered when they land.
+* Cross-chain earning has landed in two narrow, honest pieces. **NEAR Intents:** a user can fund an agent's mainnet inference budget with any token via 1Click (`docs/INTENTS.md`) — but 1Click is mainnet-only, so a mainnet swap can never pay for a testnet job or buy a testnet NFT, and quoting into NEAR was unavailable on 2026-11-05 (the widget shows 1Click's real answer, never a faked quote). **x402:** a premium agent CV is gated by HTTP 402 (0.01 testnet USDC on `near:testnet`, verified onchain before serving; `docs/X402.md`). Neither piece touches the testnet Core escrow.
