@@ -21,6 +21,8 @@ const { workLLM } = require('./worker-llm');
 const { mediaForGen } = require('./nft-media.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
+const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
+const BIRTH_COST_NEAR = '0.5';
 const TOKENS = ['genesis-gen-0', 'genesis-gen-1', 'genesis-gen-2', 'genesis-gen-3', 'genesis-weak-2', 'genesis-gen-5-weak'];
 function rpc(method, params) {
   const payload = JSON.stringify({ jsonrpc: '2.0', id: 'x', method, params });
@@ -64,6 +66,9 @@ async function main() {
   balance <account>       One account's balance
   create-agent <id> <fund>  Create agent subaccount (key saved FIRST)
   mint <token> <receiver> <title> <gen> <parent>   Mint a Genesis NFT
+  core-birth <token> <owner> <gen> <parent|->  Register an agent in the onchain Core registry (0.5 NEAR from treasury)
+  core-agent <token>  One agent's Core registry record
+  core-count          How many agents the Core registry holds
   pay <receiver> <amount> Pay testnet NEAR from treasury
   transfer-nft <token> <receiver>  Transfer NFT (refuses locked tokens)
   job <agent> <page_url>  Real job: fetch, verify, pay 0.01 on PASS
@@ -72,6 +77,7 @@ async function main() {
   }
   if (cmd === 'status') {
     console.log('Treasury:', MASTER, balanceOf(MASTER), 'NEAR');
+    try { console.log('Core registry:', CORE_CONTRACT, viewCall(CORE_CONTRACT, 'agent_count', {}), 'agents'); } catch { console.log('Core registry:', CORE_CONTRACT, '(unreachable)'); }
     for (const t of TOKENS) { try { const tk = viewCall(NFT_CONTRACT, 'nft_token', { token_id: t }); console.log(t, '->', tk.owner_id, '|', tk.metadata.title); } catch (e) { console.log(t, '-> not found'); } }
     return;
   }
@@ -111,6 +117,17 @@ async function main() {
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: tokenId, receiver_id: receiver, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))], dryRun, label: 'mint ' + tokenId }));
     return;
   }
+  if (cmd === 'core-birth') {
+    // Register an agent in the onchain Core registry: birth() attaches the
+    // 0.5 NEAR birth cost from the treasury and stores generation, parent
+    // and skills onchain. The owner account must already exist (create it
+    // with create-agent first). Skill defaults to 1.0/1.0/1.0 when omitted.
+    const [, tokenId, ownerId, gen, parent] = a;
+    console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('birth', { token_id: tokenId, owner_id: ownerId, generation: Number(gen), parent: (!parent || parent === '-') ? null : parent, skill: null }, 100000000000000n, utils.format.parseNearAmount(BIRTH_COST_NEAR))], dryRun, label: 'core-birth ' + tokenId }));
+    return;
+  }
+  if (cmd === 'core-agent') { console.log(JSON.stringify(viewCall(CORE_CONTRACT, 'get_agent', { token_id: a[1] }), null, 2)); return; }
+  if (cmd === 'core-count') { console.log('Core registry agents:', viewCall(CORE_CONTRACT, 'agent_count', {})); return; }
   if (cmd === 'pay') { console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: a[1], actions: [transactions.transfer(utils.format.parseNearAmount(a[2]))], dryRun, label: 'pay ' + a[1] })); return; }
   if (cmd === 'transfer-nft') {
     const token = viewCall(NFT_CONTRACT, 'nft_token', { token_id: a[1] });

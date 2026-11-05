@@ -23,6 +23,8 @@ const require = createRequire(import.meta.url);
 const { workLLM } = require('./worker-llm.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
+const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
+const BIRTH_COST_NEAR = '0.5';
 const ROOT = new URL('..', import.meta.url).pathname;
 function rpc(method, params) {
   const payload = JSON.stringify({ jsonrpc: '2.0', id: 'x', method, params });
@@ -66,6 +68,11 @@ server.tool('genesis_mint', 'Mint a Genesis NFT (NEP-171) on nft.primitives.test
     extra: JSON.stringify({ generation: a.generation, parent: a.parent, speed: a.speed, quality: a.quality, costEff: a.costEff, status: 'alive' }) };
   return text(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: NFT_CONTRACT, actions: [transactions.functionCall('nft_mint', { token_id: a.token_id, receiver_id: a.receiver_id, token_metadata: metadata }, 300000000000000n, utils.format.parseNearAmount('0.1'))] }));
 });
+server.tool('genesis_core_birth', 'Register an agent in the onchain Genesis Core registry (core.genesisdemo354551.testnet): birth() attaches the 0.5 NEAR birth cost from the treasury and stores generation, parent and skills onchain. The owner account must already exist. Skill defaults to 1.0/1.0/1.0 when omitted; parent may be "-" for none.', { token_id: z.string(), owner_id: z.string(), generation: z.number(), parent: z.string() }, async (a) => {
+  return text(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('birth', { token_id: a.token_id, owner_id: a.owner_id, generation: a.generation, parent: (!a.parent || a.parent === '-') ? null : a.parent, skill: null }, 100000000000000n, utils.format.parseNearAmount(BIRTH_COST_NEAR))] }));
+});
+server.tool('genesis_core_agent', 'Get one agent\'s Genesis Core registry record (generation, parent, skills, status, jobs, earnings) from core.genesisdemo354551.testnet.', { token_id: z.string() }, async ({ token_id }) => text(viewCall(CORE_CONTRACT, 'get_agent', { token_id })));
+server.tool('genesis_core_count', 'How many agents the Genesis Core onchain registry holds.', {}, async () => text({ core_contract: CORE_CONTRACT, agent_count: viewCall(CORE_CONTRACT, 'agent_count', {}) }));
 server.tool('genesis_create_agent', 'Create a Genesis agent subaccount under the treasury, funded with testnet NEAR. The new key is saved to .testnet-agents.json BEFORE the creation tx is broadcast.', { agent_id: z.string(), fund_near: z.string() }, async ({ agent_id, fund_near }) => {
   const accountId = agent_id.endsWith('.' + MASTER) ? agent_id : agent_id + '.' + MASTER;
   const kp = KeyPair.fromRandom('ed25519');

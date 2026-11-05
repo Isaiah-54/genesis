@@ -107,13 +107,19 @@ node src/cli.js agents
 node src/cli.js token genesis-gen-2
 node src/cli.js create-agent gen3 0.5
 node src/cli.js mint genesis-gen-3 gen3.genesisdemo354551.testnet "Genesis Gen 3" 3 genesis-gen-2
+node src/cli.js core-birth genesis-gen-3 gen3.genesisdemo354551.testnet 3 genesis-gen-2
+node src/cli.js core-agent genesis-gen-3
+node src/cli.js core-count
 node src/cli.js job gen2.genesisdemo354551.testnet https://docs.near.org/primitives/nft/nft
 node src/cli.js transfer-nft genesis-weak-2 genesisdemo354551.testnet
 # Add --dry-run to any write command to preview without broadcasting.
 ```
 
-Or use it from any MCP client: `node src/mcp-server.mjs` (stdio) exposes  
-`genesis_token`, `genesis_balance`, `genesis_pay`, `genesis_mint`,  
+Genesis Core (onchain agent registry + job escrow) is deployed at `core.genesisdemo354551.testnet` — see `docs/CONTRACT.md` for the deploy proof and params. The registry starts empty; register an existing agent with `core-birth` (0.5 NEAR birth cost from the treasury, skills default to 1.0/1.0/1.0).
+
+Or use it from any MCP client: `node src/mcp-server.mjs` (stdio) exposes
+`genesis_token`, `genesis_balance`, `genesis_pay`, `genesis_mint`,
+`genesis_core_birth`, `genesis_core_agent`, `genesis_core_count`,
 `genesis_create_agent`, `genesis_transfer_nft` and `genesis_job`.
 
 ## What it is

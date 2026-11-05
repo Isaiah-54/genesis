@@ -199,6 +199,7 @@
   async function runBrowserJob(text, brief, keywords, minWords) {
     const kw = keywords.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
     let output = '';
+    let worker = 'extractive-fallback';
     try {
       const prompt =
         'Summarise the following for a brief about "' +
@@ -208,7 +209,7 @@
         '. Text:\n\n' +
         text.slice(0, 2500);
       const r = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt));
-      if (r.ok) output = await r.text();
+      if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; }
     } catch (_) {}
     if (!output || output.length < 40) {
       const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
@@ -226,7 +227,65 @@
     const words = (output.toLowerCase().match(/[a-z]+/g) || []).length;
     const covered = kw.filter((k) => output.toLowerCase().includes(k)).length;
     const pass = words >= (minWords || 20) && covered >= Math.ceil(Math.max(kw.length, 1) * 0.5);
-    return { output, words, covered, total: kw.length, pass };
+    return { output, words, covered, total: kw.length, pass, worker };
+  }
+
+  async function sha256Hex(text) {
+    if (!window.crypto || !window.crypto.subtle) return '(hash unavailable in this browser)';
+    const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function wireAgentJobButton() {
+    const btn = $('runAgentJobBtn');
+    if (!btn) return;
+    const copyBtn = $('copyAgentJobBtn');
+    btn.addEventListener('click', async () => {
+      const out = $('agentJobOut');
+      const verdict = $('agentJobVerdict');
+      const hashEl = $('agentJobHash');
+      const payEl = $('agentJobPay');
+      if (copyBtn) copyBtn.style.display = 'none';
+      if (hashEl) hashEl.textContent = '';
+      if (payEl) payEl.textContent = '';
+      const tokenId = ($('agentJobToken') && $('agentJobToken').value || '').trim() || 'genesis-visitor-1';
+      if (!accountId) { out.textContent = 'Connect a wallet first (Mint section above).'; return; }
+      if (!accountId.endsWith('.testnet')) {
+        out.textContent = 'This is a MAINNET account (' + accountId + '). Agent jobs pay in testnet NEAR — connect a .testnet account instead.';
+        return;
+      }
+      out.textContent = 'Running… (real model call, can take up to a minute)';
+      const res = await runBrowserJob(
+        $('agentJobText').value,
+        $('agentJobBrief').value,
+        $('agentJobKeywords').value,
+        parseInt($('agentJobMin').value, 10)
+      );
+      out.textContent = res.output;
+      verdict.textContent =
+        'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
+        ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: ' +
+        (res.pass ? 'PASS' : 'FAIL');
+      verdict.style.color = res.pass ? 'var(--green)' : 'var(--red)';
+      const hash = await sha256Hex(res.output);
+      if (hashEl) hashEl.textContent = 'Full output sha256: ' + hash;
+      if (!res.pass) {
+        if (payEl) payEl.textContent = 'No payment — job failed verification.';
+        return;
+      }
+      const payload =
+        'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
+        ' · ' + res.words + ' words · ' + res.covered + '/' + res.total + ' keywords · Verdict: PASS' +
+        ' · Output hash: ' + hash + ' · Output: ' + res.output;
+      if (payEl) payEl.textContent = 'Passed. Payment is not automatic here — copy the result below and send it to Everest in chat; he verifies the hash and pays 0.01 NEAR from the treasury to ' + accountId + '.';
+      if (copyBtn) {
+        copyBtn.style.display = '';
+        copyBtn.onclick = async () => {
+          try { await navigator.clipboard.writeText(payload); copyBtn.textContent = 'Copied — send it to Everest'; }
+          catch (_) { copyBtn.textContent = 'Copy failed — select the text above'; }
+        };
+      }
+    });
   }
 
   function wireJobButton() {
@@ -266,6 +325,7 @@
 
   wireWalletButtons();
   wireJobButton();
+  wireAgentJobButton();
   updateWalletButtons();
 
   window.addEventListener('load', async () => {
