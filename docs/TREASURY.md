@@ -8,13 +8,13 @@ answers — the economics must close on their own.
 
 | Action | Treasury cost | Near-intents price | Exact price |
 |---|---|---|---|
-| mint | 0.15 NEAR (0.05 birth + 0.1 NFT mint) | 0.50 USDC | 0.05 testnet USDC |
-| breed | 0.15 NEAR (0.05 birth + 0.1 NFT mint) | 0.50 USDC | 0.05 testnet USDC |
+| mint | 0.15 NEAR (0.05 birth + 0.1 NFT mint) | 0.30 USDC (subsidised) | 0.05 testnet USDC |
+| breed | 0.15 NEAR (0.05 birth + 0.1 NFT mint) | 0.30 USDC (subsidised) | 0.05 testnet USDC |
 | evolve | gas only | 0.35 USDC | 0.01 testnet USDC |
 | buy | listing price + gas | 0.50, or dry-quote conversion | 0.05, or dry-quote conversion |
 | premium CV | — | 0.35 USDC | 0.01 testnet USDC |
 
-Mint and breed are cost-covering at 0.50 USDC: 0.15 NEAR at NEAR
+Mint and breed are priced at 0.30 USDC for the Hackathon — below the 0.15 NEAR cost at NEAR
 ~$2.50. **Re-price if NEAR moves materially** — the price is a
 constant in `api/agent-action.js` (`INTENTS_PRICES`), not a live
 feed. Evolve costs only gas and buy costs the listing price, so

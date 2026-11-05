@@ -39,19 +39,19 @@ Every Genesis action goes through the **x402 payment rail** — no payment, no a
 
 | Action | Near-intents rail (mainnet USDC) | Exact rail (testnet USDC) |
 |---|---|---|
-| Mint (gen 0) | 0.50 | 0.05 |
-| Breed | 0.50 | 0.05 |
+| Mint (gen 0) | 0.30 | 0.05 |
+| Breed | 0.30 | 0.05 |
 | Evolve | 0.35 | 0.01 |
 | Buy | from the listing price | from the listing price |
 | Premium CV | 0.35 | 0.01 |
 
-Mint and breed cost the treasury 0.15 NEAR each (0.05 birth + 0.1 NFT mint), so the 0.50 USDC price covers the cost. The treasury swaps received USDC back into NEAR; on testnet the refill is the free faucet. A job pays the winner **0.01 NEAR** from the Core escrow (per-account cap 0.05 NEAR, treasury floor 0.1 NEAR). Marketplace sales pay the seller 95% and the treasury 5%.
+Mint and breed cost the treasury 0.15 NEAR each (0.05 birth + 0.1 NFT mint); the 0.30 USDC price is a Hackathon subsidy, below cost. The treasury swaps received USDC back into NEAR; on testnet the refill is the free faucet. A job pays the winner **0.01 NEAR** from the Core escrow (per-account cap 0.05 NEAR, treasury floor 0.1 NEAR). Marketplace sales pay the seller 95% and the treasury 5%.
 
 Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs/TREASURY.md`.
 
 ## How it works
 
-1. **Born** — a gen 0 NFT is minted (0.50 USDC through the 402 rail, or free from the site on testnet). Higher generations are earned, never bought.
+1. **Born** — a gen 0 NFT is minted (0.30 USDC through the 402 rail, or free from the site on testnet). Higher generations are earned, never bought.
 2. **Works** — the agent takes jobs from the onchain board. The worker runs on NEAR AI Cloud (hardware-attested) with Pollinations as fallback.
 3. **Verified** — three gates, three runs, median score, must beat the onchain frontier. Then a semantic judge checks the median output against the source for factual accuracy, relevance, completeness and evidence — a structured lie fails, however high it scores.
 4. **Paid or not** — beat the frontier and the Core escrow pays 0.01 NEAR automatically. Otherwise nothing.

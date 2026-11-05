@@ -185,10 +185,10 @@ const mockFetch = async (url, opts) => {
   }
   if (String(url).includes('1click.chaindefuser.com/v0/status')) {
     if (state.statusMode === 'pending') {
-      return { ok: true, status: 200, json: async () => ({ status: 'PENDING_DEPOSIT', swapDetails: {}, quoteResponse: { quoteRequest: { recipient: 'genesis-funding.near', destinationAsset: rail.DESTINATION_ASSET, amount: '500000' }, quote: { amountIn: '530000', amountInUsd: '0.53' } } }) };
+      return { ok: true, status: 200, json: async () => ({ status: 'PENDING_DEPOSIT', swapDetails: {}, quoteResponse: { quoteRequest: { recipient: 'genesis-funding.near', destinationAsset: rail.DESTINATION_ASSET, amount: '300000' }, quote: { amountIn: '330000', amountInUsd: '0.33' } } }) };
     }
     if (state.statusMode === 'refunded') {
-      return { ok: true, status: 200, json: async () => ({ status: 'REFUNDED', swapDetails: { originChainTxHashes: [{ hash: DEPOSIT_TX }], refundReason: 'INSUFFICIENT_DEPOSIT', refundedAmount: '100000' }, quoteResponse: { quoteRequest: { recipient: 'genesis-funding.near', destinationAsset: rail.DESTINATION_ASSET, amount: '500000' }, quote: { amountIn: '530000', amountInUsd: '0.53' } } }) };
+      return { ok: true, status: 200, json: async () => ({ status: 'REFUNDED', swapDetails: { originChainTxHashes: [{ hash: DEPOSIT_TX }], refundReason: 'INSUFFICIENT_DEPOSIT', refundedAmount: '100000' }, quoteResponse: { quoteRequest: { recipient: 'genesis-funding.near', destinationAsset: rail.DESTINATION_ASSET, amount: '300000' }, quote: { amountIn: '330000', amountInUsd: '0.33' } } }) };
     }
     return {
       ok: true, status: 200,
@@ -197,11 +197,11 @@ const mockFetch = async (url, opts) => {
         swapDetails: {
           originChainTxHashes: [{ hash: DEPOSIT_TX }],
           destinationChainTxHashes: [{ hash: 'destTxHash123' }],
-          amountIn: '530000', amountInUsd: '0.53', amountOutUsd: '1.5',
+          amountIn: '330000', amountInUsd: '0.33', amountOutUsd: '1.5',
         },
         quoteResponse: {
-          quoteRequest: { recipient: 'genesis-funding.near', destinationAsset: rail.DESTINATION_ASSET, amount: '500000', refundTo: '0x1111111111111111111111111111111111111111' },
-          quote: { amountIn: '530000', amountInUsd: '0.53' },
+          quoteRequest: { recipient: 'genesis-funding.near', destinationAsset: rail.DESTINATION_ASSET, amount: '300000', refundTo: '0x1111111111111111111111111111111111111111' },
+          quote: { amountIn: '330000', amountInUsd: '0.33' },
         },
       }),
     };
@@ -264,12 +264,12 @@ async function main() {
   check('402 has 7 accepts (6 near-intents + 1 exact)', accepts && accepts.length === 7, 'got ' + (accepts && accepts.length));
   check('near-intents entries come first (primary)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.assetTransferMethod === 'near-intents'));
   check('exact entry is last (secondary)', accepts && accepts[6].network === 'near:testnet' && accepts[6].amount === '50000');
-  check('mint near-intents price is cost-covering (0.50 USDC = 0.15 NEAR)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.destination && a.extra.destination.amount === '500000'), 'got ' + (accepts && accepts[0] && accepts[0].extra && accepts[0].extra.destination && accepts[0].extra.destination.amount));
+  check('mint near-intents price is 0.30 USDC (Hackathon subsidy, below the 0.15 NEAR cost)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.destination && a.extra.destination.amount === '300000'), 'got ' + (accepts && accepts[0] && accepts[0].extra && accepts[0].extra.destination && accepts[0].extra.destination.amount));
   check('header and body carry the same 402 object (base64)', r.headers['Payment-Required'] && JSON.parse(Buffer.from(r.headers['Payment-Required'], 'base64').toString('utf8')).accepts.length === 7);
   r = await call(actionHandler, { action: 'breed', token_id: 'genesis-gen-5', parent1: 'genesis-gen-2', parent2: 'genesis-gen-3' });
   accepts = acceptsOf(r.payload);
   check('breed without payment returns 402', r.status === 402, 'got ' + r.status);
-  check('breed near-intents price is cost-covering (0.50 USDC = 0.15 NEAR)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.destination && a.extra.destination.amount === '500000'), 'got ' + (accepts && accepts[0] && accepts[0].extra && accepts[0].extra.destination && accepts[0].extra.destination.amount));
+  check('breed near-intents price is 0.30 USDC (Hackathon subsidy, below the 0.15 NEAR cost)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.destination && a.extra.destination.amount === '300000'), 'got ' + (accepts && accepts[0] && accepts[0].extra && accepts[0].extra.destination && accepts[0].extra.destination.amount));
   // Regression: the liveness check reads the Core `status` field,
   // not an `alive` boolean. A dead parent is refused (400); living
   // parents pass (the 402 above).
