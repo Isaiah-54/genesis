@@ -161,9 +161,23 @@ async function validateAction(action, params, view) {
     if (!params.token_id || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(params.token_id)) {
       return { ok: false, error: 'token_id is required (lowercase, letters/digits/dashes, 2-64 chars)' };
     }
+    // Check BOTH the NFT contract and the Core registry. The two can
+    // disagree (a birth that registered the agent but whose NFT mint
+    // never landed) — that split-brain token is completable, not a
+    // duplicate: the action just mints the NFT. Only a token that
+    // already HAS an NFT is a duplicate.
     let existing = null;
     try { existing = await viewFn(NFT_CONTRACT, 'nft_token', { token_id: params.token_id }); } catch (_) {}
     if (existing) return { ok: false, error: `token ${params.token_id} already exists (owner ${existing.owner_id})` };
+    let agent = null;
+    try { agent = await viewFn(CORE_CONTRACT, 'get_agent', { token_id: params.token_id }); } catch (_) {}
+    if (agent) {
+      const receiver = (params.receiver || TREASURY_ACCOUNT).trim();
+      if (agent.owner_id !== receiver) {
+        return { ok: false, error: `token ${params.token_id} is already registered in the Core (owner ${agent.owner_id}) — the NFT can only be minted to that owner` };
+      }
+      return { ok: true, completeOnly: true, agent };
+    }
     return { ok: true };
   }
   if (action === 'breed') {
@@ -175,6 +189,16 @@ async function validateAction(action, params, view) {
     let existing = null;
     try { existing = await viewFn(NFT_CONTRACT, 'nft_token', { token_id: params.token_id }); } catch (_) {}
     if (existing) return { ok: false, error: `token ${params.token_id} already exists (owner ${existing.owner_id})` };
+    let childAgent = null;
+    try { childAgent = await viewFn(CORE_CONTRACT, 'get_agent', { token_id: params.token_id }); } catch (_) {}
+    if (childAgent) {
+      const receiver = (params.receiver || TREASURY_ACCOUNT).trim();
+      if (childAgent.owner_id !== receiver) {
+        return { ok: false, error: `child ${params.token_id} is already registered in the Core (owner ${childAgent.owner_id}) — the NFT can only be minted to that owner` };
+      }
+      // The breed already landed but the NFT mint did not: completable.
+      return { ok: true, completeOnly: true, childAgent };
+    }
     for (const p of ['parent1', 'parent2']) {
       let agent = null;
       try { agent = await viewFn(CORE_CONTRACT, 'get_agent', { token_id: params[p] }); } catch (_) {}
@@ -253,16 +277,27 @@ async function defaultExecutor(action, params, ctx) {
   const txs = {};
 
   if (action === 'mint') {
-    const birth = await treasury.functionCall({
-      contractId: CORE_CONTRACT, methodName: 'birth',
-      args: { token_id: params.token_id, owner_id: receiver, generation: 0, parent: null, skill: { speed: 1.0, quality: 1.0, cost_eff: 1.0 } },
-      gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.5'),
-    });
-    txs.birth = birth.transaction.hash;
+    // Idempotent: if the agent is already registered in the Core
+    // (a birth whose NFT mint never landed), skip birth and just
+    // mint the NFT to the Core record's owner. A fresh mint does
+    // birth + nft_mint.
+    let agent = null;
+    try { agent = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: params.token_id }); } catch (_) {}
+    if (!agent) {
+      const birth = await treasury.functionCall({
+        contractId: CORE_CONTRACT, methodName: 'birth',
+        args: { token_id: params.token_id, owner_id: receiver, generation: 0, parent: null, skill: { speed: 1.0, quality: 1.0, cost_eff: 1.0 } },
+        gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.5'),
+      });
+      txs.birth = birth.transaction.hash;
+    } else {
+      txs.birth = 'already-registered';
+    }
+    const mintReceiver = agent ? agent.owner_id : receiver;
     const minted = await treasury.functionCall({
       contractId: NFT_CONTRACT, methodName: 'nft_mint',
       args: {
-        token_id: params.token_id, receiver_id: receiver,
+        token_id: params.token_id, receiver_id: mintReceiver,
         token_metadata: {
           title: params.title || 'Genesis Gen 0', description: 'Genesis agent — born, earns, reproduces, evolves',
           media: 'https://genesis-roan-eta.vercel.app/nft/gen-0.svg',
@@ -272,23 +307,32 @@ async function defaultExecutor(action, params, ctx) {
       gas: NFT_MINT_GAS, attachedDeposit: utils.format.parseNearAmount('0.1'),
     });
     txs.mint = minted.transaction.hash;
-    return { action, token_id: params.token_id, generation: 0, owner: receiver, txs };
+    return { action, token_id: params.token_id, generation: 0, owner: mintReceiver, txs };
   }
 
   if (action === 'breed') {
-    const bred = await treasury.functionCall({
-      contractId: CORE_CONTRACT, methodName: 'breed',
-      args: { token_id: params.token_id, owner_id: receiver, parent1: params.parent1, parent2: params.parent2 },
-      gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.5'),
-    });
-    txs.breed = bred.transaction.hash;
+    // Idempotent like mint: if the child is already registered in
+    // the Core, skip breed and just mint the NFT.
+    let existingChild = null;
+    try { existingChild = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: params.token_id }); } catch (_) {}
+    if (!existingChild) {
+      const bred = await treasury.functionCall({
+        contractId: CORE_CONTRACT, methodName: 'breed',
+        args: { token_id: params.token_id, owner_id: receiver, parent1: params.parent1, parent2: params.parent2 },
+        gas: GAS, attachedDeposit: utils.format.parseNearAmount('0.5'),
+      });
+      txs.breed = bred.transaction.hash;
+    } else {
+      txs.breed = 'already-registered';
+    }
     // Read the child back for its generation and skills (for the receipt).
     let child = null;
     try { child = await rpcView(CORE_CONTRACT, 'get_agent', { token_id: params.token_id }); } catch (_) {}
+    const breedReceiver = child ? child.owner_id : receiver;
     const minted = await treasury.functionCall({
       contractId: NFT_CONTRACT, methodName: 'nft_mint',
       args: {
-        token_id: params.token_id, receiver_id: receiver,
+        token_id: params.token_id, receiver_id: breedReceiver,
         token_metadata: {
           title: `Genesis Gen ${child ? child.generation : '?'}`, description: 'Genesis agent — born of two parents, earns, reproduces, evolves',
           media: `https://genesis-roan-eta.vercel.app/nft/gen-${child ? child.generation : 0}.svg`,
@@ -298,7 +342,7 @@ async function defaultExecutor(action, params, ctx) {
       gas: NFT_MINT_GAS, attachedDeposit: utils.format.parseNearAmount('0.1'),
     });
     txs.mint = minted.transaction.hash;
-    return { action, token_id: params.token_id, generation: child ? child.generation : null, owner: receiver, parents: [params.parent1, params.parent2], txs };
+    return { action, token_id: params.token_id, generation: child ? child.generation : null, owner: breedReceiver, parents: [params.parent1, params.parent2], txs };
   }
 
   if (action === 'evolve') {
