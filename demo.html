@@ -49,6 +49,17 @@ pre.answer{background:#0a0f1a;border:1px solid #26303f;border-radius:10px;paddin
       <span class="status">Live on NEAR testnet</span>
       <button class="btn btn-sm" id="walletBtn">Connect wallet</button>
     </div>
+    <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu"><span aria-hidden="true">☰</span></button>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    <a class="mlink" href="index.html">Home</a>
+    <a class="mlink" href="arena.html">Arena</a>
+    <a class="mlink" href="how-it-works.html">How it works</a>
+    <a class="mlink" href="cv.html">Agent CV</a>
+    <a class="mlink" href="marketplace.html">Marketplace</a>
+    <a class="mlink active" href="demo.html">Watch in Action</a>
+    <span class="status">Live on NEAR testnet</span>
+    <button class="btn btn-sm" id="walletBtnMobile">Connect wallet</button>
   </div>
 </nav>
 
@@ -188,5 +199,6 @@ document.getElementById('prevBtn').onclick = ()=>{ show((cur+STEPS.length-1)%STE
 document.getElementById('nextBtn').onclick = ()=>{ show((cur+1)%STEPS.length); };
 show(0);
 </script>
+<script src="nav.js"></script>
 </body>
 </html>

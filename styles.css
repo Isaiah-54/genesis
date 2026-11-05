@@ -145,3 +145,45 @@ footer {
   background: var(--gold); color: #111; font-weight: 800;
   display: flex; align-items: center; justify-content: center; font-size: 13px;
 }
+
+/* Hamburger menu (phones): a dark circular button, the same look as the
+   one in the screenshot. On desktop the links stay inline in the bar and
+   the button is hidden. */
+.menu-btn {
+  display: none;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: #1c2338; border: 1px solid var(--line); color: var(--text);
+  font-size: 20px; line-height: 1; padding: 0; cursor: pointer;
+  align-items: center; justify-content: center; flex: 0 0 auto;
+  box-shadow: none;
+}
+.mobile-menu { display: none; }
+@media (max-width: 900px) {
+  nav .inner { gap: 10px; }
+  /* The inline links and the status/wallet row move into the menu. */
+  nav a.nlink, nav .right { display: none; }
+  .menu-btn { display: inline-flex; margin-left: auto; }
+  .mobile-menu {
+    display: none;
+    border-top: 1px solid var(--line);
+    padding: 6px 20px 14px;
+    background: rgba(7, 12, 26, 0.98);
+  }
+  .mobile-menu.open { display: block; }
+  .mobile-menu a.mlink {
+    display: block; padding: 12px 2px; font-size: 16px;
+    color: var(--text); text-decoration: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .mobile-menu a.mlink.active { color: var(--gold); }
+  .mobile-menu .status { margin: 12px 0 10px; display: inline-block; }
+  .mobile-menu .btn { width: 100%; text-align: center; }
+}
+/* Phones and desktop: content never stretches past a readable width,
+   and nothing on the page forces horizontal scrolling. */
+img, video, canvas, svg { max-width: 100%; height: auto; }
+@media (max-width: 700px) {
+  header, main, footer { padding: 16px; }
+  .hero { padding: 28px 16px 8px; }
+  h1 { font-size: clamp(30px, 9vw, 40px); }
+}
