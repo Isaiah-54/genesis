@@ -14,6 +14,9 @@
 // Usage:
 //   node scripts/faucet-relay-refill.js            transfer 2 NEAR
 //   node scripts/faucet-relay-refill.js --amount 1 transfer 1 NEAR
+//   node scripts/faucet-relay-refill.js --force   top up even when
+//     the treasury is already above the 1.2 NEAR target (explicit
+//     top-ups only; the default refuses when no refill is due).
 //   node scripts/faucet-relay-refill.js --dry      show what would
 //     happen (relay balance, treasury balance) without moving funds.
 // Exit code 0 when the treasury ends at or above the 1.2 NEAR target.
@@ -59,8 +62,14 @@ async function balanceOf(near, accountId) {
 
 async function main() {
   const dry = process.argv.includes('--dry');
-  const amountArg = process.argv.find((a) => a.startsWith('--amount'));
-  const amountNear = amountArg ? Number(amountArg.split('=')[1] || amountArg.split(' ')[1]) : 2;
+  const force = process.argv.includes('--force'); // top up even when above target
+  const amountIdx = process.argv.findIndex((a) => a === '--amount' || a.startsWith('--amount='));
+  let amountNear = 2;
+  if (amountIdx !== -1) {
+    const arg = process.argv[amountIdx];
+    const raw = arg.includes('=') ? arg.split('=')[1] : process.argv[amountIdx + 1];
+    amountNear = Number(raw);
+  }
   if (!Number.isFinite(amountNear) || amountNear <= 0) throw new Error('--amount must be a positive number of NEAR');
 
   const relay = await loadRelay();
@@ -72,8 +81,8 @@ async function main() {
   const treasuryBefore = await balanceOf(near, TREASURY_ACCOUNT);
   console.log('Relay ' + relay.accountId + ': ' + relayBefore.near.toFixed(4) + ' NEAR');
   console.log('Treasury ' + TREASURY_ACCOUNT + ': ' + treasuryBefore.near.toFixed(4) + ' NEAR');
-  if (treasuryBefore.near >= REFILL_TARGET_NEAR) {
-    console.log('Treasury is already at or above the ' + REFILL_TARGET_NEAR + ' NEAR target — no refill needed.');
+  if (!force && treasuryBefore.near >= REFILL_TARGET_NEAR) {
+    console.log('Treasury is already at or above the ' + REFILL_TARGET_NEAR + ' NEAR target — no refill needed. Re-run with --force to top up anyway.');
     process.exitCode = 0;
     return;
   }

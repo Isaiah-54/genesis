@@ -77,13 +77,12 @@ and says exactly what is missing.
 
 ## State (2026-11-05)
 
-- Treasury `genesisdemo354551.testnet`: **2.2015 NEAR** (verified
-  live 2026-11-05 ~20:25 WAT) — refilled via the helper-faucet relay
-  (see below); covers 3 actions at 0.6 NEAR each.
-- Relay `genesisrelay370982.testnet`: 8 NEAR kept for future refills
-  (created 2026-11-05 via the helper faucet with 10 NEAR, 2 sent to
-  the treasury, tx `HCQZvgagdaqujnrs5E6dgPh5ZYciA8zfrNK42RJt1sgk`).
-  Key only in `.testnet-faucet-relay.json` (chmod 600, gitignored).
+- Treasury `genesisdemo354551.testnet`: **9.2015 NEAR** (verified
+  live 2026-11-05 ~20:27 WAT) — 9 of the relay's 10 faucet NEAR are
+  now in the treasury (2 + 7); covers 15 actions at 0.6 NEAR each.
+- Relay `genesisrelay370982.testnet`: ~1 NEAR left (second transfer
+  7 NEAR, tx `6Wo2fzmM21DyPmSgapJMhTZy7HtsgT5vgtww5LERRG12`,
+  2026-11-05 ~20:27 WAT, on Isaiah's 'transfer 9 out of the 10').
 - near-faucet.io is DOWN as of 2026-11-05: 5 failed claims that day
   (2 in the morning, 3 in the evening including after a reload),
   every one ending in the same generic server-side "ERROR — There
