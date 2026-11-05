@@ -126,13 +126,26 @@ quote/deposit dance. See `docs/X402.md`.
 
 ## Tests
 
-- `node test/agent-action.cjs` — 45 checks, mocked, no funds:
+- `node test/agent-action.cjs` — 49 checks, mocked, no funds:
   402 shape, pre-validation, exact payment / reuse / wrong
   amount / wrong receiver / hex-base58 dedup, near-intents quote
   and deposit flows (mock 1Click, test-signed quotes), tampered
   operation token, 1Click outage, bad quote signature, pending
-  settlement, demo mode, buy, and the premium endpoint's two rails.
+  settlement, demo mode, buy, split-brain completion (a Core-
+  registered agent without an NFT is completable; a mismatched
+  receiver is refused), and the premium endpoint's two rails.
 - `node test/near-intents-rail.cjs` — 30 checks: quote signature
   verification, operation tokens, receipts, offers builder.
 - `node test/x402.cjs` — 11 checks: the premium endpoint's exact
   rail regression suite.
+
+## Live proof
+
+First real action through the rail, 2026-11-05: **mint
+genesis-visitor-4** (gen 0, owner gen3) for 0.05 testnet USDC,
+HTTP 200 + signed receipt, NFT mint tx
+`24Bz5uC9c5FGvojfVb3qXgvXjV2FTSkiNYEPCfF85Npw`. Full proof in
+`demo/x402-action-proof.json`. Known gap proven live in the same
+run: a replayed payment passed the per-instance dedup on a
+different Vercel instance (see `docs/X402.md` — the proper fix
+is a shared store).
