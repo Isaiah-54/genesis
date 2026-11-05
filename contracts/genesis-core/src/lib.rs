@@ -133,8 +133,12 @@ impl Contract {
     ) {
         assert!(self.agents.get(&token_id).is_none(), "Agent already exists");
         let deposit = env::attached_deposit();
-        // Minimal check — real birth_cost should be set by owner after init
-        assert!(deposit.as_yoctonear() > 0, "Must attach deposit for birth");
+        // birth_cost is 0 until the owner calls set_params after init; once
+        // set (deploy script sets 0.5 NEAR), a birth must attach at least that.
+        assert!(
+            deposit.as_yoctonear() >= self.birth_cost.0,
+            "Must attach at least birth_cost"
+        );
 
         let agent = Agent {
             token_id: token_id.clone(),

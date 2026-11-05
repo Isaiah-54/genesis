@@ -1,0 +1,35 @@
+# GitHub Actions workflow to build Genesis Core (Rust -> WASM).
+# Muse's GitHub App has no workflows permission, so THIS FILE CANNOT BE
+# PUSHED BY THE AGENT. Isaiah: add it in the GitHub web UI at
+# .github/workflows/build-genesis-core.yml (copy the contents of this file),
+# then run it from the Actions tab (workflow_dispatch) or push a change
+# under contracts/genesis-core/**. Download the "genesis-core-wasm"
+# artifact and send the genesis_core.wasm file to Everest in chat; he
+# deploys it with src/chain-deploy-core.js (see docs/DEPLOY_CORE.md).
+name: Build Genesis Core
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'contracts/genesis-core/**'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install cargo-near
+        run: cargo install cargo-near
+      - name: Build contract
+        run: cd contracts/genesis-core && cargo near build
+      - name: Upload WASM
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-core-wasm
+          path: |
+            contracts/genesis-core/target/near/genesis_core.wasm
+            contracts/genesis-core/target/near/genesis_core.abi.json
+          if-no-files-found: error
+          retention-days: 30
