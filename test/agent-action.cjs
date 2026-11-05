@@ -253,7 +253,7 @@ async function main() {
   check('402 has 7 accepts (6 near-intents + 1 exact)', accepts && accepts.length === 7, 'got ' + (accepts && accepts.length));
   check('near-intents entries come first (primary)', accepts && accepts.slice(0, 6).every((a) => a.extra && a.extra.assetTransferMethod === 'near-intents'));
   check('exact entry is last (secondary)', accepts && accepts[6].network === 'near:testnet' && accepts[6].amount === '50000');
-  check('header and body carry the same 402 object', r.headers['Payment-Required'] && JSON.parse(r.headers['Payment-Required']).accepts.length === 7);
+  check('header and body carry the same 402 object (base64)', r.headers['Payment-Required'] && JSON.parse(Buffer.from(r.headers['Payment-Required'], 'base64').toString('utf8')).accepts.length === 7);
 
   // 2. Invalid actions are refused BEFORE any payment (400, not 402).
   r = await call(actionHandler, { action: 'mint', token_id: 'genesis-visitor-2' });

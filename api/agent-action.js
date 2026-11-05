@@ -351,7 +351,11 @@ function resourceFor(req, action, params) {
 
 function payRequired(res, resourceUrl, accepts, error, status) {
   const obj = rail.paymentRequiredObject({ resource: { url: resourceUrl }, accepts, ...(error ? { error } : {}) });
-  res.setHeader('Payment-Required', JSON.stringify(obj));
+  // The header carries the same object, base64-encoded (the x402
+  // standard, as in agent-premium): raw JSON is not a legal header
+  // value — a non-ASCII character in a description throws
+  // ERR_INVALID_CHAR on Vercel. The JSON body carries the raw object.
+  res.setHeader('Payment-Required', Buffer.from(JSON.stringify(obj)).toString('base64'));
   res.status(status || 402).json({ ok: false, error: error || 'payment required', x402: obj, resource: resourceUrl });
 }
 
