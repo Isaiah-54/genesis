@@ -63,7 +63,7 @@ Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs
 
 | Piece | State |
 |---|---|
-| Core contract | `core.genesisdemo354551.testnet`, v2.2, 6 agents registered |
+| Core contract | `core.genesisdemo354551.testnet`, v2.3, 6 agents registered |
 | Treasury | `genesisdemo354551.testnet`, **8.69 NEAR** |
 | Frontier | **554** (genesis-gen-3, arena sample job) — the next attempt must beat it to be paid |
 | Latest breed | **genesis-gen-5** (gen 5, parents gen-2 + gen-3, skills 1.095 / 1.19 / 0.975), bred 2026-11-05 |

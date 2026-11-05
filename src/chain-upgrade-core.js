@@ -2,7 +2,7 @@
 // Pattern: sign locally with near-api-js, broadcast via curl (near-api-js
 // RPC drops through this VM's proxy; curl succeeds).
 //
-// Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate]
+// Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate] [--migrate-only]
 //   wasm-path: the built v2.3 contract, e.g.
 //   contracts/genesis-core/target/near/genesis_core.wasm
 //   --dry-run: print the plan, sizes and costs; sign/broadcast nothing.
@@ -11,6 +11,13 @@
 //     shape (migrate() reads a v2.2 state and would panic on v2.3 bytes).
 //     The state struct is unchanged by a return-value-only fix, so a plain
 //     redeploy keeps every agent, job, listing and frontier intact.
+//   --migrate-only: the v2.3 code is already deployed but migrate() has not
+//     run yet (state still v2.2-shaped, so view calls panic until it runs).
+//     Skip the deploy and the pre-flight views; just call migrate() and verify.
+// migrate() is signed by the TREASURY (the Core owner), NOT the Core
+// account: v2.3's migrate asserts predecessor == old.owner_id, and the
+// Core account is not its own owner. Signing it with the Core key fails
+// with "Only the Core owner can migrate" (seen live 2026-11-05).
 //
 // Steps: deploy the v2.3 WASM to core.genesisdemo354551.testnet -> call
 // migrate() FIRST (it rewrites the v2.2 state into the v2.3 shape: Listing
@@ -79,14 +86,20 @@ async function main() {
   const wasmPath = process.argv[2];
   const dryRun = process.argv.includes('--dry-run');
   const noMigrate = process.argv.includes('--no-migrate');
-  if (!wasmPath) throw new Error('Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate]');
+  const migrateOnly = process.argv.includes('--migrate-only');
+  if (!wasmPath) throw new Error('Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate] [--migrate-only]');
   const wasm = fs.readFileSync(wasmPath);
   const crypto = require('crypto');
   const wasmSha = crypto.createHash('sha256').update(wasm).digest('hex');
   const core = viewAccount(CORE_ID);
   const coreBal = Number(core.amount) / 1e24;
   const oldCodeHash = core.code_hash;
-  const before = {
+  // In migrate-only recovery the v2.3 code is already live on v2.2-shaped
+  // state, so every view call panics until migrate() rewrites the state.
+  // Skip the pre-flight reads in that case.
+  const before = migrateOnly
+    ? { note: 'migrate-only recovery: v2.3 code already deployed, state still v2.2-shaped; pre-flight views panic until migrate runs', coreBalanceNear: coreBal, codeHash: oldCodeHash }
+    : {
     agent_count: callFunction(CORE_ID, 'agent_count', {}),
     coreBalanceNear: coreBal,
     codeHash: oldCodeHash,
@@ -102,14 +115,21 @@ async function main() {
     : 'Steps: deploy v2.3 WASM -> migrate() (first call, v2.2 -> v2.3: Listing status/buyer, owner_index, nft_contract, schema_version; preserves agents with wins/evolutions intact, jobs, frontiers, listings) -> verify.');
   if (dryRun) { console.log('DRY RUN — nothing signed, nothing broadcast.'); return; }
   const coreKp = KeyPair.fromString(CORE_KEY.privateKey);
+  const masterKp = KeyPair.fromString(MASTER_SAVED.privateKey);
   const proof = { core: CORE_ID, wasmBytes: wasm.length, wasmSha256: wasmSha, before, txs: {} };
-  proof.txs.deploy = await sendTx(CORE_ID, coreKp, CORE_ID, [
-    transactions.deployContract(wasm),
-  ], 'deploy v2.3 contract', dryRun);
+  if (migrateOnly) {
+    proof.txs.deploy = { status: 'SKIPPED (--migrate-only: v2.3 code already deployed)' };
+  } else {
+    proof.txs.deploy = await sendTx(CORE_ID, coreKp, CORE_ID, [
+      transactions.deployContract(wasm),
+    ], 'deploy v2.3 contract', dryRun);
+  }
   if (noMigrate) {
     proof.txs.migrate = { status: 'SKIPPED (--no-migrate: state already v2.3-shaped)' };
   } else {
-    proof.txs.migrate = await sendTx(CORE_ID, coreKp, CORE_ID, [
+    // Signed by the treasury (MASTER), the Core owner — NOT the Core
+    // account. v2.3 migrate() asserts predecessor == old.owner_id.
+    proof.txs.migrate = await sendTx(MASTER, masterKp, CORE_ID, [
       transactions.functionCall('migrate', {}, 100000000000000n, 0n),
     ], 'migrate v2.2 -> v2.3', dryRun);
   }
