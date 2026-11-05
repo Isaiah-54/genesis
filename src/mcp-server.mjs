@@ -181,10 +181,11 @@ server.tool('genesis_job', 'Run a real Genesis job: fetch a live page, summarise
   // Semantic quality gate, after the frontier check so a tied score
   // costs no judge call: the median output must also pass the judge
   // (accuracy, relevance, completeness, evidence against the source).
+  // The judge gets the full page, not the worker's 3,000-char slice.
   let semantic = null;
   const frontierOk = v.pass && (!frontier || v.medianScore > frontier.best_score);
   if (frontierOk) {
-    semantic = await semanticVerify({ brief, keywords, sourceText: job.text, output: v.medianOutput, structural: v.medianGates, callLLM });
+    semantic = await semanticVerify({ brief, keywords, sourceText: page, output: v.medianOutput, structural: v.medianGates, callLLM });
   }
   let payment = null;
   if (frontierOk && semantic && semantic.passed) {

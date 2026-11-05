@@ -134,5 +134,41 @@ const PASS_JUDGE = { accuracy: 92, relevance: 88, completeness: 85, evidence: 90
   check('accuracy bar is 80', THRESHOLDS.accuracy === 80, JSON.stringify(THRESHOLDS));
   check('other bars are 70', THRESHOLDS.relevance === 70 && THRESHOLDS.completeness === 70 && THRESHOLDS.evidence === 70, JSON.stringify(THRESHOLDS));
 
+  // 9. The judge gets the longer view: a fact sitting beyond the
+  // worker's 3,000-char slice must reach the judge. Proven live on the
+  // run-3 answer, whose deploy-command details sit at char 9,599 of the
+  // source — a 3,000-char judge view flagged a correct answer.
+  const LONG_SOURCE = 'filler '.repeat(1500) + ' the global contract is nft.globals.primitives.testnet and the deploy metadata includes reference_hash';
+  check('long source reaches past char 3000', LONG_SOURCE.indexOf('reference_hash') > 3000, String(LONG_SOURCE.indexOf('reference_hash')));
+  const longCapture = {};
+  await semanticVerify({
+    brief: JOB.brief, keywords: JOB.keywords, sourceText: LONG_SOURCE, output: GOOD,
+    structural: verifyStrict(JOB, GOOD).gates,
+    callLLM: judgeStub(PASS_JUDGE, longCapture),
+  });
+  check('judge prompt contains a fact from beyond char 3000', JSON.stringify(longCapture.messages).includes('reference_hash'), 'fact missing from judge prompt');
+  check('judge prompt caps the source at the budget', JSON.stringify(longCapture.messages).length < 20000, 'source not capped');
+  // verifyRunsWithSemantics hands the judge the longer source when the
+  // caller supplies it, while the worker keeps the short slice.
+  const runCapture = {};
+  v = await verifyRunsWithSemantics(JOB, [GOOD, GOOD, GOOD], judgeStub(PASS_JUDGE, runCapture), { judgeSource: LONG_SOURCE });
+  check('verifyRunsWithSemantics passes the longer source to the judge', JSON.stringify(runCapture.messages).includes('reference_hash'), 'judgeSource not used');
+  check('verifyRunsWithSemantics still pays on judge pass', v.pass === true, JSON.stringify(v.semantic));
+
+  // 10. The judge reads a decoded source: fetched pages are tag-stripped
+  // but not entity-decoded, so a code example reads `&quot;decimals&quot;`
+  // and a live judge claimed the field is nowhere in the source. The
+  // worker's source (and the job_def_id built from it) must not change.
+  const ENTITY_SOURCE = 'filler '.repeat(600) + ' the init args are {&quot;decimals&quot;:0, &quot;media&quot;:&quot;x&quot;}';
+  const entityCapture = {};
+  await semanticVerify({
+    brief: JOB.brief, keywords: JOB.keywords, sourceText: ENTITY_SOURCE, output: GOOD,
+    structural: verifyStrict(JOB, GOOD).gates,
+    callLLM: judgeStub(PASS_JUDGE, entityCapture),
+  });
+  const entityPrompt = entityCapture.messages.map((m) => m.content).join('\n');
+  check('judge prompt decodes entities', entityPrompt.includes('"decimals":0'), 'decoded field missing from judge prompt');
+  check('judge prompt carries no raw entities', !entityPrompt.includes('&quot;'), 'raw entities left in judge prompt');
+
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

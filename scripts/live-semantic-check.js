@@ -24,7 +24,9 @@ const { verifyStrict } = require('../src/engine');
   for (const [name, out] of [['TRUE', TRUE], ['FALSE', FALSE]]) {
     const structural = verifyStrict(job, out);
     console.log(`\n${name} — structural pass: ${structural.pass} | score: ${structural.score}`);
-    const sem = await semanticVerify({ brief: job.brief, keywords: job.keywords, sourceText: job.text, output: out, structural: structural.gates, callLLM });
+    // The judge gets the full page (it slices to SOURCE_BUDGET): the
+    // facts an answer draws on can live past the worker's 3,000 chars.
+    const sem = await semanticVerify({ brief: job.brief, keywords: job.keywords, sourceText: page, output: out, structural: structural.gates, callLLM });
     console.log(`${name} — semantic passed: ${sem.passed} | scores: ${JSON.stringify(sem.scores)} | judge model: ${sem.model} | verifiable: ${sem.verifiable}`);
     console.log(`${name} — reason: ${sem.reason}`);
     if (sem.unsupported_claims.length) console.log(`${name} — unsupported claims: ${JSON.stringify(sem.unsupported_claims)}`);

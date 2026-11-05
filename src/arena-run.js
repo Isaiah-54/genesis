@@ -79,8 +79,10 @@ function rpcView(contractId, method, args) {
     // gates, the median scores, and the median output must also pass
     // the semantic judge (accuracy, relevance, completeness, evidence
     // against the source). A contestant whose median output is a
-    // structured lie does not pass, however high it scores.
-    const v = await verifyRunsWithSemantics(jobInput, runs.map(r => r.output), callLLM);
+    // structured lie does not pass, however high it scores. The judge
+    // gets the full page (judgeSource), not the worker's 3,000-char
+    // slice — the facts an answer draws on can live further down it.
+    const v = await verifyRunsWithSemantics(jobInput, runs.map(r => r.output), callLLM, { judgeSource: page });
     const medianOutput = v.medianOutput;
     const outputHash = crypto.createHash('sha256').update(medianOutput).digest('hex');
     entries.push({

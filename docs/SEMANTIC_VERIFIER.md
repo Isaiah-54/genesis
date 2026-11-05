@@ -35,10 +35,28 @@ unsupported claims, and what is missing, so a refusal is auditable.
   model via `SEMANTIC_JUDGE_MODEL`, so the worker does not grade its own
   homework when a second model is set. On the live check the judge ran on
   NEAR AI with a verifiable attestation.
-- **The judge prompt carries the source** (first 6000 chars) and asks for
-  JSON only: four 0–100 scores, `unsupported_claims`, `missing`, `reason`.
-  The parser tolerates markdown fences and rejects out-of-range or missing
-  scores.
+- **The judge prompt carries the source** (first 12,000 chars, HTML
+  entities decoded) and asks for JSON only: four 0–100 scores,
+  `unsupported_claims`, `missing`, `reason`. The parser tolerates
+  markdown fences and rejects out-of-range or missing scores. The worker
+  reads only the first 3,000 chars of a page, but the judge gets the
+  longer view: the facts an answer draws on can live further down the
+  page. Proven live 2026-11-05 — the run-3 winning answer's
+  deploy-command details sit at char 9,599 of the NEAR NFT docs, so a
+  3,000-char judge view flagged a correct answer at accuracy 30.
+  Callers hand the judge the full page; the 12,000-char cap does the
+  slicing. The worker's 3,000-char slice is unchanged, so its outputs
+  and scores do not move. The source is entity-decoded for the judge
+  only (`&quot;decimals&quot;:0` reads as `"decimals":0`): the fetched
+  source is tag-stripped but not decoded, and a live judge claimed the
+  field was nowhere in the source. Decoding in the worker's pipeline
+  would change the job_def_id and reset the frontier, so it stays out.
+- **Token budget.** The judge reasons before answering: 800 max tokens was
+  spent entirely on reasoning and returned empty content live. The judge
+  gets 4000 tokens. 2000 was enough for a 3,000-char source, but the
+  longer 12,000-char view needs more reasoning room: at 2000 the judge
+  returned empty content live (2026-11-05), at 4000 it answered. If the
+  model family changes, re-check this.
 - **Fail closed.** An unavailable judge, an unparseable answer, or a score
   below bar all mean **no payment**.
 - **Cost discipline.** The judge runs on the median output only (1 call per
@@ -83,7 +101,14 @@ judges):
   removes the self-grading bias; it is not set yet.
 - **Token budget.** The judge reasons before answering: 800 max tokens was
   spent entirely on reasoning and returned empty content live. The judge
-  gets 2000 tokens. If the model family changes, re-check this.
+  gets 4000 tokens (see "How it runs"). If the model family changes,
+  re-check this.
 - **The payment service is still the oracle.** The semantic gate runs in
   the service too, but the service decides who gets paid — the verifier is
   independent code, the decision is centralised.
+- **The site judge is a GET.** The payment service calls Pollinations with
+  the prompt in the URL, so a 12,000-char source makes a ~20,000-char URL
+  and the request fails (a POST was tried live 2026-11-05 and timed out).
+  A failure fails closed — no payment on an unjudged answer — but a long
+  pasted source can block a site payment. The local judge (NEAR AI) has
+  no such limit.

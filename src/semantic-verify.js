@@ -27,11 +27,23 @@
 // are the source of truth.
 const { verifyRuns } = require('./engine');
 
-const SOURCE_BUDGET = 6000; // chars of source text sent to the judge
+const SOURCE_BUDGET = 12000; // chars of source text sent to the judge.
+// The worker reads only the first 3,000 chars of a page, but the facts
+// an answer draws on can live further down it. Proven live 2026-11-05:
+// the run-3 winning answer's deploy-command details sit at char 9,599
+// of the NEAR NFT docs, so a 3,000-char judge view flagged a correct
+// answer (accuracy 30). 12,000 chars covers those facts (~3,000 tokens
+// of source, well within the judge's context) while the worker keeps
+// its 3,000-char slice — the worker's outputs and scores must not move.
+// Callers hand the judge the full page; this cap does the slicing.
 // The judge reasons before answering (verified live 2026-11-05): 800
 // tokens is spent entirely on reasoning and returns empty content, so
-// the judge gets 2000 — room to check the claims, then emit the JSON.
-const JUDGE_MAX_TOKENS = 2000;
+// the judge gets 4000 — room to check the claims, then emit the JSON.
+// 2000 was enough for a 3,000-char source, but the longer 12,000-char
+// view needs more reasoning room: at 2000 the judge returned empty
+// content live (2026-11-05), at 4000 it answered. If the model family
+// changes, re-check this.
+const JUDGE_MAX_TOKENS = 4000;
 
 // Minimum score per dimension. Accuracy carries the highest bar: this
 // verifier exists because a wrong answer must not be paid.
@@ -39,8 +51,23 @@ const THRESHOLDS = { accuracy: 80, relevance: 70, completeness: 70, evidence: 70
 
 const JUDGE_SYSTEM = 'You are a strict quality judge for Genesis, an agent economy. You judge a summary against its source text. The source text is the ONLY ground truth: a claim is true only if the source supports it. Do not use outside knowledge. A beautifully written summary with a false claim FAILS. Return JSON only, no other text.';
 
+// The fetched source is tag-stripped but NOT entity-decoded, so a code
+// example reads `&quot;decimals&quot;:0` — the judge (live, 2026-11-05)
+// claimed `decimals` appears nowhere in the source. Decode the common
+// entities here, for the judge only: the worker's source slice (and the
+// job_def_id built from it) must not change, or the frontier resets.
+function decodeEntities(s) {
+  return String(s || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+}
+
 function judgeMessages({ brief, keywords, sourceText, output }) {
-  const src = String(sourceText || '').slice(0, SOURCE_BUDGET);
+  const src = decodeEntities(sourceText).slice(0, SOURCE_BUDGET);
   return [
     { role: 'system', content: JUDGE_SYSTEM },
     {
@@ -161,10 +188,13 @@ async function verifyRunsWithSemantics(job, outputs, callLLM, opts = {}) {
   if (!structural.pass) {
     return { ...structural, semantic: null, semanticSkipped: 'structural gates failed', pass: false };
   }
+  // The judge gets the longer view (opts.judgeSource, usually the full
+  // fetched page) — the worker's 3,000-char slice in job.text is too
+  // narrow to ground the answer's claims. Falls back to job.text.
   const semantic = await semanticVerify({
     brief: job.brief,
     keywords: job.keywords,
-    sourceText: job.text,
+    sourceText: opts.judgeSource || job.text,
     output: structural.medianOutput,
     structural: structural.medianGates,
     callLLM,

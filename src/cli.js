@@ -322,7 +322,9 @@ async function main() {
     // the median output against the source (accuracy, relevance,
     // completeness, evidence); a failure means no payment. It runs
     // after the frontier check so a tied score costs no judge call.
-    const sem = await semanticVerify({ brief: job.brief, keywords: job.keywords, sourceText: job.text, output: v.medianOutput, structural: v.medianGates, callLLM });
+    // The judge gets the full page, not the worker's 3,000-char slice:
+    // the facts an answer draws on can live further down the page.
+    const sem = await semanticVerify({ brief: job.brief, keywords: job.keywords, sourceText: page, output: v.medianOutput, structural: v.medianGates, callLLM });
     console.log('Semantic:', sem.passed ? 'PASS' : 'FAIL', '| scores:', JSON.stringify(sem.scores), '|', sem.reason);
     if (!sem.passed) { console.log('No payment — semantic verification failed.'); return; }
     // Pay through the Core escrow so the frontier updates onchain:

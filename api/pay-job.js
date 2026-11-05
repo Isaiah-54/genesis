@@ -190,11 +190,26 @@ function jobDefId(brief, keywords, source) {
 // Vault and is not in Vercel env); the local judge uses NEAR AI first.
 // Fail closed: an unavailable or unusable judge refuses payment.
 const SEMANTIC_THRESHOLDS = { accuracy: 80, relevance: 70, completeness: 70, evidence: 70 };
-const SEMANTIC_SOURCE_BUDGET = 6000;
+const SEMANTIC_SOURCE_BUDGET = 12000; // chars of source sent to the judge.
+// The worker reads the first 3,000 chars, but the facts an answer draws
+// on can live further down the page (proven live on the run-3 answer:
+// its deploy-command details sit at char 9,599 of the NEAR NFT docs).
+// 12,000 covers them; the structural gates still use the full source.
 const SEMANTIC_JUDGE_SYSTEM = 'You are a strict quality judge for Genesis, an agent economy. You judge a summary against its source text. The source text is the ONLY ground truth: a claim is true only if the source supports it. Do not use outside knowledge. A beautifully written summary with a false claim FAILS. Return JSON only, no other text.';
 
 function semanticJudgeMessages({ brief, keywords, source, output }) {
-  const src = String(source || '').slice(0, SEMANTIC_SOURCE_BUDGET);
+  // Same entity decoding as src/semantic-verify.js (keep the two
+  // identical): the fetched source is tag-stripped but not decoded, so
+  // a code example reads `&quot;decimals&quot;:0` and the judge claims
+  // the field is nowhere in the source. Decode for the judge only.
+  const src = String(source || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .slice(0, SEMANTIC_SOURCE_BUDGET);
   return [
     { role: 'system', content: SEMANTIC_JUDGE_SYSTEM },
     {
@@ -244,6 +259,11 @@ async function judgeSemantics({ brief, keywords, source, output, copiedShare }) 
   });
   const messages = semanticJudgeMessages({ brief, keywords, source, output });
   const prompt = messages.map((m) => m.role + ': ' + m.content).join('\n\n');
+  // GET with the prompt in the URL: fine for the short sources the site
+  // sends, but a 12,000-char source makes a ~20,000-char URL and the
+  // request fails (verified live 2026-11-05 — a POST was tried and timed
+  // out, so the transport stays GET). A failure here fails closed (no
+  // payment), it never pays on an unjudged answer.
   let raw;
   try {
     const res = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt), { signal: AbortSignal.timeout(60000) });

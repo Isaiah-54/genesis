@@ -1,25 +1,27 @@
-// Upgrade Genesis Core v2.1 -> v2.2 IN PLACE on the same account.
+// Upgrade Genesis Core v2.2 -> v2.3 IN PLACE on the same account.
 // Pattern: sign locally with near-api-js, broadcast via curl (near-api-js
 // RPC drops through this VM's proxy; curl succeeds).
 //
 // Usage: node src/chain-upgrade-core.js <wasm-path> [--dry-run] [--no-migrate]
-//   wasm-path: the built v2.2 contract, e.g.
+//   wasm-path: the built v2.3 contract, e.g.
 //   contracts/genesis-core/target/near/genesis_core.wasm
 //   --dry-run: print the plan, sizes and costs; sign/broadcast nothing.
 //   --no-migrate: deploy the WASM only, do NOT call migrate(). Use this
-//     for a code-only fix on a contract whose state is ALREADY in the v2.2
-//     shape (migrate() reads a v2.1 state and would panic on v2.2 bytes).
+//     for a code-only fix on a contract whose state is ALREADY in the v2.3
+//     shape (migrate() reads a v2.2 state and would panic on v2.3 bytes).
 //     The state struct is unchanged by a return-value-only fix, so a plain
 //     redeploy keeps every agent, job, listing and frontier intact.
 //
-// Steps: deploy the v2.2 WASM to core.genesisdemo354551.testnet -> call
-// migrate() FIRST (it rewrites the v2.1 state into the v2.2 shape, adding
-// Agent.wins and Agent.evolutions and keeping every agent, job, frontier,
-// listing and parameter; it must run before any other method, because other
-// methods would try to read v2.2 state from v2.1 bytes) ->
-// verify the registry survived (agent_count 3, the three agents present
-// with wins 0 and evolutions 0, the live frontier still 483, get_listings
-// as before).
+// Steps: deploy the v2.3 WASM to core.genesisdemo354551.testnet -> call
+// migrate() FIRST (it rewrites the v2.2 state into the v2.3 shape: Listing
+// gains status/buyer (marketplace state machine), owner_index is rebuilt,
+// nft_contract and schema_version are set; agents are preserved WITH wins
+// and evolutions intact, jobs/frontiers/listings/params are preserved; it
+// must run before any other method, because other methods would try to
+// read v2.3 state from v2.2 bytes) ->
+// verify the registry survived (agent_count 6, all six agents present
+// with their wins intact — gen-2 wins 0, gen-3 wins 3 evolutions 1 — the
+// live frontier still 554, get_listings as before with status "listed").
 // Nothing is deployed without Isaiah's explicit yes on the preview.
 const fs = require('fs');
 const { execSync } = require('child_process');
@@ -96,39 +98,43 @@ async function main() {
   console.log(`Core ${CORE_ID}: ${coreBal.toFixed(4)} NEAR, code_hash ${oldCodeHash}`);
   console.log(`Before upgrade: agent_count ${before.agent_count}.`);
   console.log(noMigrate
-    ? 'Steps: deploy fixed WASM only (no migrate — state is already v2.2-shaped) -> verify.'
-    : 'Steps: deploy v2.2 WASM -> migrate() (first call, v2.1 -> v2.2: adds Agent.wins/evolutions, preserves agents/jobs/frontiers/listings) -> verify.');
+    ? 'Steps: deploy fixed WASM only (no migrate — state is already v2.3-shaped) -> verify.'
+    : 'Steps: deploy v2.3 WASM -> migrate() (first call, v2.2 -> v2.3: Listing status/buyer, owner_index, nft_contract, schema_version; preserves agents with wins/evolutions intact, jobs, frontiers, listings) -> verify.');
   if (dryRun) { console.log('DRY RUN — nothing signed, nothing broadcast.'); return; }
   const coreKp = KeyPair.fromString(CORE_KEY.privateKey);
   const proof = { core: CORE_ID, wasmBytes: wasm.length, wasmSha256: wasmSha, before, txs: {} };
   proof.txs.deploy = await sendTx(CORE_ID, coreKp, CORE_ID, [
     transactions.deployContract(wasm),
-  ], 'deploy v2.2 contract', dryRun);
+  ], 'deploy v2.3 contract', dryRun);
   if (noMigrate) {
-    proof.txs.migrate = { status: 'SKIPPED (--no-migrate: state already v2.2-shaped)' };
+    proof.txs.migrate = { status: 'SKIPPED (--no-migrate: state already v2.3-shaped)' };
   } else {
     proof.txs.migrate = await sendTx(CORE_ID, coreKp, CORE_ID, [
       transactions.functionCall('migrate', {}, 100000000000000n, 0n),
-    ], 'migrate v2.1 -> v2.2', dryRun);
+    ], 'migrate v2.2 -> v2.3', dryRun);
   }
   proof.verification = {
     agent_count: callFunction(CORE_ID, 'agent_count', {}),
     get_agent_genesis_gen_2: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-gen-2' }),
     get_agent_genesis_gen_3: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-gen-3' }),
+    get_agent_genesis_gen_5: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-gen-5' }),
     get_agent_genesis_visitor_1: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-visitor-1' }),
+    get_agent_genesis_visitor_4: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-visitor-4' }),
+    get_agent_genesis_visitor_9: callFunction(CORE_ID, 'get_agent', { token_id: 'genesis-visitor-9' }),
     get_listings: callFunction(CORE_ID, 'get_listings', {}),
     // The live frontier (sample job, set by the first frontier payment)
     // must survive the migrate — wiping it would reset the difficulty
     // bar to zero.
     get_frontier_sample_job: callFunction(CORE_ID, 'get_frontier', { job_def_id: 'f1d2c1eab156e2882c5c384e77aef3a69c5458c3ead77a528ac9cfa341f7cd52' }),
     get_jobs: callFunction(CORE_ID, 'get_jobs', {}),
+    get_open_liabilities: callFunction(CORE_ID, 'get_open_liabilities', {}),
     coreBalanceNear: Number(viewAccount(CORE_ID).amount) / 1e24,
     codeHash: viewAccount(CORE_ID).code_hash,
     note: noMigrate
       ? 'Code-only redeploy: state struct unchanged, so agent_count, agents, listings and frontiers must be exactly as before.'
-      : 'agent_count must stay 3 and the three agents must be present, each with wins 0 and evolutions 0 — the migration preserves the registry. get_frontier (sample job) must still be 483 (gen2) and get_listings must be exactly as before the migrate.',
+      : 'agent_count must stay 6 and all six agents must be present with wins intact (gen-2 wins 0, gen-3 wins 3 evolutions 1). get_frontier (sample job) must still be 554 (gen3) and get_listings must be exactly as before the migrate, now with status "listed" and buyer null. get_open_liabilities is the new escrow view.',
   };
-  const proofFile = noMigrate ? 'demo/core-upgrade-v2-fix.json' : 'demo/core-upgrade-v2.2.json';
+  const proofFile = noMigrate ? 'demo/core-upgrade-v2.3-fix.json' : 'demo/core-upgrade-v2.3.json';
   fs.writeFileSync(proofFile, JSON.stringify(proof, null, 2));
   console.log(`Wrote ${proofFile}`);
   console.log(JSON.stringify(proof, null, 2));
