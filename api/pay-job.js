@@ -13,6 +13,12 @@
 //   3. recomputes the job-definition id (sha256 of brief + keywords +
 //      source) and reads the onchain frontier for it: the median score
 //      must BEAT the best score on that job, or no payment is made.
+//   3b. judges the median output SEMANTICALLY (see judgeSemantics
+//      below): accuracy, relevance, completeness and evidence against
+//      the source text. The structural gates cannot tell a beautifully
+//      structured lie from a true summary, so a median output that
+//      passes the gates but invents facts is refused here, before any
+//      payment. An unavailable or unusable judge fails closed.
 //   4. checks the token exists on the shared NFT contract,
 //   5. dedups through the Genesis Core escrow: get_job(median hash) — if
 //      the job is already "paid" it refuses; if it is "open" (a previous
@@ -41,10 +47,10 @@
 //   the payment is refused. If the balance read fails, fail closed.
 // - Payment goes to the connected account that ran the job, not
 //   necessarily the token owner. The token only has to exist.
-// - What remains unbuilt: the arena script still scores by the older
-//   rule (keywords + words) rather than the strict verifier + frontier;
-//   the job board is a file, not onchain (the Core has post_job escrow
-//   but the board is not wired to it yet).
+// - What remains unbuilt: the job board is a file, not onchain (the Core
+//   has post_job escrow but the board is not wired to it yet). The arena
+//   now uses the strict verifier + semantic judge + frontier (since
+//   2026-11-05).
 const crypto = require('crypto');
 const { connect, keyStores, KeyPair, utils } = require('near-api-js');
 
@@ -167,6 +173,113 @@ function jobDefId(brief, keywords, source) {
     .digest('hex');
 }
 
+// Semantic quality judge — DUPLICATED from src/semantic-verify.js: the
+// serverless function cannot import it, so keep the prompt, thresholds,
+// source budget and parser identical in both places. The structural
+// gates above check shape; this checks meaning, against the source text
+// as the ONLY ground truth:
+//   1. Factual accuracy — every claim supported by the source (one
+//      invented fact caps accuracy at 40).
+//   2. Relevance — the output answers the brief.
+//   3. Completeness — the brief and every keyword covered in substance.
+//   4. Originality — deterministic, from the structural gates (copied
+//      share under 30%); the judge does not re-decide this.
+//   5. Evidence — claims anchored to specifics from the source.
+// The judge is a second model call. On Vercel the only keyless route is
+// the public Pollinations text API (the NEAR AI key lives in the Secure
+// Vault and is not in Vercel env); the local judge uses NEAR AI first.
+// Fail closed: an unavailable or unusable judge refuses payment.
+const SEMANTIC_THRESHOLDS = { accuracy: 80, relevance: 70, completeness: 70, evidence: 70 };
+const SEMANTIC_SOURCE_BUDGET = 6000;
+const SEMANTIC_JUDGE_SYSTEM = 'You are a strict quality judge for Genesis, an agent economy. You judge a summary against its source text. The source text is the ONLY ground truth: a claim is true only if the source supports it. Do not use outside knowledge. A beautifully written summary with a false claim FAILS. Return JSON only, no other text.';
+
+function semanticJudgeMessages({ brief, keywords, source, output }) {
+  const src = String(source || '').slice(0, SEMANTIC_SOURCE_BUDGET);
+  return [
+    { role: 'system', content: SEMANTIC_JUDGE_SYSTEM },
+    {
+      role: 'user',
+      content:
+        'Brief: ' + (brief || '') + '\n'
+        + 'Keywords: ' + (keywords || []).join(', ') + '\n\n'
+        + 'Source text (ground truth):\n' + src + '\n\n'
+        + 'Output to judge:\n' + (output || '') + '\n\n'
+        + 'Judge the output on four dimensions, 0-100 each:\n'
+        + '- accuracy: every factual claim in the output is supported by the source. Deduct for each unsupported or contradicted claim. A single invented fact (a wrong number, name, or step) caps accuracy at 40.\n'
+        + '- relevance: the output answers the brief.\n'
+        + '- completeness: the output covers the brief and every keyword in substance, not just by mentioning them.\n'
+        + '- evidence: claims are anchored to specifics from the source (names, numbers, steps), not vague generalities.\n\n'
+        + 'Return ONLY this JSON:\n'
+        + '{"accuracy": 0-100, "relevance": 0-100, "completeness": 0-100, "evidence": 0-100, "unsupported_claims": ["claim 1", ...], "missing": ["missing point 1", ...], "reason": "one sentence"}',
+    },
+  ];
+}
+
+function parseSemanticJudgeOutput(text) {
+  if (typeof text !== 'string') return null;
+  const cleaned = text.replace(/```(?:json)?/g, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  let j;
+  try { j = JSON.parse(cleaned.slice(start, end + 1)); } catch (_) { return null; }
+  for (const d of ['accuracy', 'relevance', 'completeness', 'evidence']) {
+    if (typeof j[d] !== 'number' || !Number.isFinite(j[d]) || j[d] < 0 || j[d] > 100) return null;
+  }
+  return {
+    accuracy: Math.round(j.accuracy),
+    relevance: Math.round(j.relevance),
+    completeness: Math.round(j.completeness),
+    evidence: Math.round(j.evidence),
+    unsupported_claims: Array.isArray(j.unsupported_claims) ? j.unsupported_claims.map(String) : [],
+    missing: Array.isArray(j.missing) ? j.missing.map(String) : [],
+    reason: typeof j.reason === 'string' ? j.reason : '',
+  };
+}
+
+async function judgeSemantics({ brief, keywords, source, output, copiedShare }) {
+  const failed = (reason) => ({
+    passed: false, scores: null, thresholds: { ...SEMANTIC_THRESHOLDS },
+    unsupported_claims: [], missing: [], reason, model: null, provider: 'pollinations', verifiable: false,
+  });
+  const messages = semanticJudgeMessages({ brief, keywords, source, output });
+  const prompt = messages.map((m) => m.role + ': ' + m.content).join('\n\n');
+  let raw;
+  try {
+    const res = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt), { signal: AbortSignal.timeout(60000) });
+    raw = await res.text();
+  } catch (e) {
+    return failed('semantic judge unavailable: ' + String(e && e.message || e).slice(0, 200));
+  }
+  const parsed = parseSemanticJudgeOutput(raw);
+  if (!parsed) return failed('semantic judge returned unusable output');
+  const originalityScore = Math.round((1 - (copiedShare || 0)) * 100);
+  const originalityPassed = (copiedShare || 0) < 0.30;
+  const scores = { accuracy: parsed.accuracy, relevance: parsed.relevance, completeness: parsed.completeness, originality: originalityScore, evidence: parsed.evidence };
+  const dimsPass = parsed.accuracy >= SEMANTIC_THRESHOLDS.accuracy
+    && parsed.relevance >= SEMANTIC_THRESHOLDS.relevance
+    && parsed.completeness >= SEMANTIC_THRESHOLDS.completeness
+    && parsed.evidence >= SEMANTIC_THRESHOLDS.evidence;
+  const passed = dimsPass && originalityPassed;
+  const failing = [];
+  if (parsed.accuracy < SEMANTIC_THRESHOLDS.accuracy) failing.push(`accuracy ${parsed.accuracy} < ${SEMANTIC_THRESHOLDS.accuracy}`);
+  if (parsed.relevance < SEMANTIC_THRESHOLDS.relevance) failing.push(`relevance ${parsed.relevance} < ${SEMANTIC_THRESHOLDS.relevance}`);
+  if (parsed.completeness < SEMANTIC_THRESHOLDS.completeness) failing.push(`completeness ${parsed.completeness} < ${SEMANTIC_THRESHOLDS.completeness}`);
+  if (parsed.evidence < SEMANTIC_THRESHOLDS.evidence) failing.push(`evidence ${parsed.evidence} < ${SEMANTIC_THRESHOLDS.evidence}`);
+  if (!originalityPassed) failing.push('originality gate failed (copied share 30% or more)');
+  return {
+    passed,
+    scores,
+    thresholds: { ...SEMANTIC_THRESHOLDS },
+    unsupported_claims: parsed.unsupported_claims,
+    missing: parsed.missing,
+    reason: passed ? (parsed.reason || 'semantic verification passed') : ('semantic verification failed: ' + failing.join('; ') + (parsed.reason ? ' — ' + parsed.reason : '')),
+    model: 'openai (pollinations)',
+    provider: 'pollinations',
+    verifiable: false,
+  };
+}
+
 async function rpcView(contractId, method, args) {
   const res = await fetch(RPC_URL, {
     method: 'POST',
@@ -268,6 +381,16 @@ module.exports = async (req, res) => {
       frontier: frontier.best_score,
       ...verdict,
     });
+  }
+
+  // Semantic quality gate, after the frontier check so a tied score
+  // costs no judge call. A median output that passes the structural
+  // gates but invents facts is refused here — the judge checks it
+  // against the source text.
+  const sem = await judgeSemantics({ brief, keywords: kws, source, output: v.medianOutput, copiedShare: v.medianGates.originality.copiedShare });
+  verdict.semantic = sem;
+  if (!sem.passed) {
+    return res.status(200).json({ ok: false, error: 'job did not pass semantic verification: ' + sem.reason, ...verdict, verdict: 'FAIL' });
   }
 
   // The token must exist on the shared NFT contract.

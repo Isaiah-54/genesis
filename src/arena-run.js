@@ -16,8 +16,9 @@ const { execSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { verifyRuns, jobDefId } = require('./engine');
-const { workLLM } = require('./worker-llm');
+const { jobDefId } = require('./engine');
+const { workLLM, callLLM } = require('./worker-llm');
+const { verifyRunsWithSemantics } = require('./semantic-verify');
 
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
 const REWARD_NEAR = '0.01';
@@ -74,7 +75,12 @@ function rpcView(contractId, method, args) {
       runs.push({ output: llm.output, worker: llm.worker, model: llm.model });
       console.log(`  ${c.agent} run ${i}: ${llm.worker} (${llm.model}), ${llm.output.length} chars (quality ${skill.quality})`);
     }
-    const v = verifyRuns(jobInput, runs.map(r => r.output));
+    // Labinius-style + semantic: all 3 runs must pass the structural
+    // gates, the median scores, and the median output must also pass
+    // the semantic judge (accuracy, relevance, completeness, evidence
+    // against the source). A contestant whose median output is a
+    // structured lie does not pass, however high it scores.
+    const v = await verifyRunsWithSemantics(jobInput, runs.map(r => r.output), callLLM);
     const medianOutput = v.medianOutput;
     const outputHash = crypto.createHash('sha256').update(medianOutput).digest('hex');
     entries.push({
@@ -83,6 +89,7 @@ function rpcView(contractId, method, args) {
       scores: v.scores,
       medianScore: v.medianScore,
       pass: v.pass,
+      semantic: v.semantic,
       medianOutput,
       outputHash,
       words: v.medianGates ? v.medianGates.originality.totalWords : 0,
@@ -92,7 +99,7 @@ function rpcView(contractId, method, args) {
       score: v.medianScore,
       output: medianOutput,
     });
-    console.log(`${c.agent} -> ${v.pass ? 'PASS' : 'FAIL'} (all 3 runs ${v.pass ? 'passed' : 'did not pass'}), scores [${v.scores.join(', ')}], median ${v.medianScore}`);
+    console.log(`${c.agent} -> ${v.pass ? 'PASS' : 'FAIL'} (all 3 runs ${v.pass ? 'passed' : 'did not pass'}), scores [${v.scores.join(', ')}], median ${v.medianScore}, semantic: ${v.semantic ? (v.semantic.passed ? 'PASS' : 'FAIL') + ' ' + JSON.stringify(v.semantic.scores) : 'skipped'}`);
   }
 
   const passing = entries.filter(e => e.pass);
@@ -141,7 +148,7 @@ function rpcView(contractId, method, args) {
     entries: entries.map(e => ({
       agent: e.agent, worker: e.runs[0].worker, model: e.runs[0].model,
       runs: e.runs.map(r => ({ run: r.run, output: r.output })),
-      scores: e.scores, medianScore: e.medianScore, pass: e.pass,
+      scores: e.scores, medianScore: e.medianScore, pass: e.pass, semantic: e.semantic,
       output: e.medianOutput, outputHash: e.outputHash,
       words: e.words, keywordsCovered: e.keywordsCovered, keywordsTotal: e.keywordsTotal,
       score: e.medianScore,
@@ -160,7 +167,7 @@ function rpcView(contractId, method, args) {
   league.matches.push({
     date: new Date().toISOString().slice(0, 10),
     job: brief,
-    note: `Strict verifier + median of 3 + frontier. ${note}`,
+    note: `Strict verifier + semantic judge + median of 3 + frontier. ${note}`,
     payment_tx: payment.tx || null,
     results: entries.map(e => ({ agent: e.agent, score: e.medianScore, words: e.words, pass: e.pass })),
     winner,

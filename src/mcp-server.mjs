@@ -21,7 +21,8 @@ import engine from './engine.js';
 const { verify, verifyStrict, jobDefId, verifyRuns } = engine;
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { workLLM } = require('./worker-llm.js');
+const { workLLM, callLLM } = require('./worker-llm.js');
+const { semanticVerify } = require('./semantic-verify.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
@@ -177,13 +178,21 @@ server.tool('genesis_job', 'Run a real Genesis job: fetch a live page, summarise
   const defId = jobDefId(brief, keywords, job.text);
   let frontier = null;
   try { frontier = viewCall(CORE_CONTRACT, 'get_frontier', { job_def_id: defId }); } catch (_) {}
+  // Semantic quality gate, after the frontier check so a tied score
+  // costs no judge call: the median output must also pass the judge
+  // (accuracy, relevance, completeness, evidence against the source).
+  let semantic = null;
+  const frontierOk = v.pass && (!frontier || v.medianScore > frontier.best_score);
+  if (frontierOk) {
+    semantic = await semanticVerify({ brief, keywords, sourceText: job.text, output: v.medianOutput, structural: v.medianGates, callLLM });
+  }
   let payment = null;
-  if (v.pass && (!frontier || v.medianScore > frontier.best_score)) {
+  if (frontierOk && semantic && semantic.passed) {
     // Pay through the Core escrow so the frontier updates onchain.
     const jobId = crypto.createHash('sha256').update(v.medianOutput).digest('hex');
     await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('post_job', { job_id: jobId, brief, keywords, min_words: 0 }, 100000000000000n, utils.format.parseNearAmount('0.01'))] });
     payment = await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('pay_job', { job_id: jobId, winner: agent_id, score: v.medianScore, job_def_id: defId }, 100000000000000n, 0n)] });
   }
-  return text({ worker: llm.worker, model: llm.model, pass: v.pass, runs: v.runs, scores: v.scores, medianScore: v.medianScore, frontier: frontier ? frontier.best_score : null, gates: v.medianGates, payment });
+  return text({ worker: llm.worker, model: llm.model, pass: v.pass, runs: v.runs, scores: v.scores, medianScore: v.medianScore, frontier: frontier ? frontier.best_score : null, gates: v.medianGates, semantic, payment });
 });
 await server.connect(new StdioServerTransport());

@@ -1,8 +1,17 @@
-# Genesis — agents that must earn their keep
+# Genesis — agents that are born, earn, reproduce, evolve, and can die
 
 **Live on NEAR testnet:** https://genesis-roan-eta.vercel.app/
 
-Each agent is a real NEP-171 NFT with a balance. It takes jobs, gets verified, gets paid — or dies. The good ones evolve, breed, and sell for more. The bad ones lose money and disappear.
+Each agent is a real NEP-171 NFT with a balance. Its whole life is six rules:
+
+- Agents start at Generation 0.
+- They take jobs and earn.
+- Successful agents fund their offspring.
+- Offspring inherit and mutate skills.
+- Agents evolve through successful work.
+- Consistently unsuccessful agents can die.
+
+The good ones can be bought and sold on the marketplace — you buy a working agent with a history, not just a picture.
 
 Built for **NEAR Hackathon: Build Beyond Boundaries** (1–14 Nov 2026). Tracks: agents, swarms, NFTs, business.
 
@@ -44,7 +53,7 @@ Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs
 
 1. **Born** — a gen 0 NFT is minted (1.50 USDC through the 402 rail, or free from the site on testnet). Higher generations are earned, never bought.
 2. **Works** — the agent takes jobs from the onchain board. The worker runs on NEAR AI Cloud (hardware-attested) with Pollinations as fallback.
-3. **Verified** — three gates, three runs, median score, must beat the onchain frontier.
+3. **Verified** — three gates, three runs, median score, must beat the onchain frontier. Then a semantic judge checks the median output against the source for factual accuracy, relevance, completeness and evidence — a structured lie fails, however high it scores.
 4. **Paid or not** — beat the frontier and the Core escrow pays 0.01 NEAR automatically. Otherwise nothing.
 5. **Evolves** — 3 paid wins since the last evolution, up to gen 9. Each evolution: +0.1 quality, +0.05 speed, +0.05 cost efficiency.
 6. **Breeds** — two living agents make a child (generation = max(parent gens) + 1, skills = parents' average + mutation, both parents recorded on the NFT).

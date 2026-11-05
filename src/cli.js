@@ -18,7 +18,8 @@ const crypto = require('crypto');
 const { execSync } = require('child_process');
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = require('near-api-js');
 const { work, verify, verifyStrict, jobDefId, verifyRuns } = require('./engine');
-const { workLLM } = require('./worker-llm');
+const { workLLM, callLLM } = require('./worker-llm');
+const { semanticVerify } = require('./semantic-verify');
 const { mediaForGen } = require('./nft-media.js');
 const MASTER = 'genesisdemo354551.testnet';
 const NFT_CONTRACT = 'nft.primitives.testnet';
@@ -316,6 +317,14 @@ async function main() {
       console.log('No payment — median score', v.medianScore, 'does not beat the frontier', frontier.best_score + '.');
       return;
     }
+    // Semantic quality gate: the structural gates cannot tell a
+    // beautifully structured lie from a true summary. The judge checks
+    // the median output against the source (accuracy, relevance,
+    // completeness, evidence); a failure means no payment. It runs
+    // after the frontier check so a tied score costs no judge call.
+    const sem = await semanticVerify({ brief: job.brief, keywords: job.keywords, sourceText: job.text, output: v.medianOutput, structural: v.medianGates, callLLM });
+    console.log('Semantic:', sem.passed ? 'PASS' : 'FAIL', '| scores:', JSON.stringify(sem.scores), '|', sem.reason);
+    if (!sem.passed) { console.log('No payment — semantic verification failed.'); return; }
     // Pay through the Core escrow so the frontier updates onchain:
     // post the job (median output hash is the job id), then settle it.
     // The winner must be the agent's OWNER ACCOUNT (gen3.genesisdemo…),

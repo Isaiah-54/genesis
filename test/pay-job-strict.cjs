@@ -5,6 +5,20 @@
 // token lookup and no payment attempt.
 const handler = require('../api/pay-job');
 
+// Stub the semantic judge (Pollinations) so the tests never call a live
+// model: the canned verdict is configurable per case. RPC calls pass
+// through to the real testnet RPC, as before.
+const realFetch = global.fetch;
+let judgeVerdict = { accuracy: 92, relevance: 88, completeness: 85, evidence: 90, unsupported_claims: [], missing: [], reason: 'All claims supported by the source.' };
+let judgeRaw = null; // when set, this exact text is returned instead
+global.fetch = async (url, opts) => {
+  if (String(url).includes('pollinations')) {
+    const text = judgeRaw !== null ? judgeRaw : JSON.stringify(judgeVerdict);
+    return { text: async () => text };
+  }
+  return realFetch(url, opts);
+};
+
 const SOURCE = 'NEAR has a shared NFT contract that anyone can mint on. The testnet contract is nft.primitives.testnet. To mint, call nft_mint with a token id, a receiver id, and token metadata including title, description and media. A deposit covers storage. NFTs on NEAR follow the NEP-177 standard with metadata under NEP-177.';
 const GOOD = 'Anyone can mint a new NFT on the NEAR blockchain, and the resulting token is recorded in the caller\'s wallet for later use. Creating that token means sending an identifier, a destination account, and a small set of descriptive fields to the shared contract, while a storage deposit pays for the data the chain keeps. Because every token follows the public NEP-171 interface, wallets and marketplaces can recognise it without any custom integration code.';
 const BASE = { token_id: 'genesis-visitor-1', account_id: 'isaiah.testnet', brief: 'NEAR NFTs global contract mint', keywords: ['near', 'nft', 'mint'], source: SOURCE };
@@ -63,6 +77,29 @@ async function call(body) {
   r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD], source: undefined });
   console.log('6. no source:', r.status, JSON.stringify(r.payload));
   if (r.status !== 400) fail('missing source was not rejected with 400');
+
+  // 7. A passing structural check still reaches the key gate only when
+  // the semantic judge passes — the verdict carries the semantic scores.
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD] });
+  if (!r.payload.semantic || r.payload.semantic.passed !== true) fail('passing job has no passing semantic verdict: ' + JSON.stringify(r.payload.semantic));
+  if (r.payload.semantic.scores.accuracy !== 92) fail('semantic accuracy is not 92');
+
+  // 8. A structurally perfect but factually wrong median output is
+  // refused by the semantic judge before the token/key gates.
+  judgeVerdict = { accuracy: 30, relevance: 85, completeness: 80, evidence: 40, unsupported_claims: ['minting costs exactly 100 NEAR'], missing: [], reason: 'The output invents a 100 NEAR fee.' };
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD] });
+  console.log('8. judge fails accuracy:', r.status, JSON.stringify(r.payload));
+  if (r.payload.verdict !== 'FAIL') fail('low-accuracy judge did not FAIL the job');
+  if (!String(r.payload.error).includes('semantic verification')) fail('low-accuracy refusal does not name semantic verification');
+  if (r.payload.semantic.scores.accuracy !== 30) fail('semantic accuracy is not 30');
+
+  // 9. An unusable judge reply fails closed.
+  judgeVerdict = { accuracy: 92, relevance: 88, completeness: 85, evidence: 90, unsupported_claims: [], missing: [], reason: 'ok' };
+  judgeRaw = 'not json at all';
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD] });
+  console.log('9. judge unusable:', r.status, JSON.stringify(r.payload));
+  if (r.payload.verdict !== 'FAIL') fail('unusable judge reply did not FAIL the job');
+  if (!String(r.payload.error).includes('semantic verification')) fail('unusable-judge refusal does not name semantic verification');
 
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

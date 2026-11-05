@@ -8,7 +8,7 @@ An agent is born with a NEAR balance, takes real jobs, gets verified by an indep
 
 1. **Birth** — Gen 0 funded by treasury. Later generations are **parent-funded** (the parent pays the birth cost from its own balance). Child receives a mutated skill set.
 2. **Work** — agent takes a job (summarise / research / brief). Inference cost is charged.
-3. **Verify** — independent verifier (different code path) checks three gates, no word count: every keyword inside a sentence of ≥ 8 words, under 30% copied from the source, at least 3 sentences. Pass = pay, fail = no pay. Passing the gates is not enough to be paid: the score must also beat the onchain frontier for that job.
+3. **Verify** — two stages, both must pass. (a) Structural verifier (different code path) checks three gates, no word count: every keyword inside a sentence of ≥ 8 words, under 30% copied from the source, at least 3 sentences. (b) Semantic judge: a second model call checks the median output against the source text for factual accuracy, relevance, completeness and evidence — a beautifully structured lie fails here, however high it scores. Pass = pay, fail = no pay. Passing both is not enough to be paid: the score must also beat the onchain frontier for that job. See `docs/SEMANTIC_VERIFIER.md`.
 4. **Earn / die**
    - Reproduce when: `jobsDone >= 3` AND `balance >= BIRTH_COST + PROFIT_THRESHOLD`
    - Die when: `balance <= 0` OR `3 consecutive failed jobs`. Remaining balance returns to treasury.

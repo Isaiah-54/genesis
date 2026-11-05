@@ -116,8 +116,8 @@ function workNearAIConnector(messages, maxTokens, model) {
 // throws when the key/helper is present but the call fails (caller logs
 // and falls through). On success returns { output, worker, model,
 // provider, verifiable, attestation, chat_id }.
-async function workNearAI(messages, maxTokens) {
-  const model = process.env.NEAR_AI_MODEL || 'z-ai/glm-5.3-flash';
+async function workNearAI(messages, maxTokens, modelOverride) {
+  const model = modelOverride || process.env.NEAR_AI_MODEL || 'z-ai/glm-5.3-flash';
   const apiKey = process.env.NEAR_AI_API_KEY;
   if (!apiKey) return workNearAIConnector(messages, maxTokens, model);
   const base = (process.env.NEAR_AI_API_URL || 'https://cloud-api.near.ai/v1').replace(/\/$/, '');
@@ -178,42 +178,62 @@ async function workNearAI(messages, maxTokens) {
     chat_id: j.id || null,
   };
 }
-async function workLLM(job, agent) {
-  const quality = agent && agent.skill && typeof agent.skill.quality === 'number' ? agent.skill.quality : 1.0;
-  const messages = promptFor(job, quality);
-  const maxTokens = maxTokensFor(quality);
+// Generic model call over the same route chain as the worker:
+//   0. NEAR AI Cloud (verifiable) — env key or the stored connector.
+//   1. Configured OpenAI-compatible endpoint (LLM_API_URL/KEY/MODEL).
+//   2. Public Pollinations text API (no key).
+// Returns { output, model, provider, verifiable, attestation, chat_id }
+// on success; THROWS when every route fails or returns nothing usable
+// (callers that must not pay on an unavailable judge fail closed on the
+// throw; workLLM catches it and falls back to the extractive summariser).
+// opts.model overrides the model name for routes 0 and 1 (used by the
+// semantic judge so it can run a different model from the worker).
+async function callLLM(messages, maxTokens, opts = {}) {
+  const modelOverride = opts.model || null;
   // Route 0: NEAR AI Cloud (verifiable inference). On any failure, log
-  // and fall through to the existing routes — never fail the job.
+  // and fall through to the existing routes — never fail the job here.
   try {
-    const near = await workNearAI(messages, maxTokens);
+    const near = await workNearAI(messages, maxTokens, modelOverride);
     if (near) return near;
   } catch (e) { console.error('NEAR AI failed, trying configured endpoint:', e.message.slice(0, 200)); }
   // Route 1: configured OpenAI-compatible endpoint
   if (process.env.LLM_API_URL && process.env.LLM_API_KEY && process.env.LLM_MODEL) {
     try {
       const raw = postJson(process.env.LLM_API_URL.replace(/\/$/, '') + '/chat/completions',
-        { model: process.env.LLM_MODEL, messages, temperature: 0.3, max_tokens: maxTokens },
+        { model: modelOverride || process.env.LLM_MODEL, messages, temperature: 0.3, max_tokens: maxTokens },
         { Authorization: 'Bearer ' + process.env.LLM_API_KEY });
       const j = JSON.parse(raw);
       const output = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || '').trim();
-      if (output.length > 20) return { output, worker: 'llm', model: process.env.LLM_MODEL, provider: process.env.LLM_API_URL, verifiable: false, attestation: null };
+      if (output.length > 20) return { output, model: modelOverride || process.env.LLM_MODEL, provider: process.env.LLM_API_URL, verifiable: false, attestation: null, chat_id: j.id || null };
       throw new Error('Empty model output');
     } catch (e) { console.error('Configured LLM failed, trying public endpoint:', e.message.slice(0, 200)); }
   }
   // Route 2: public Pollinations text API (no key). GET, not POST: the POST
   // route timed out on a large job payload from this host, while GET answers
-  // in seconds. One retry, then the honest fallback.
+  // in seconds. One retry, then the caller decides what failure means.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const prompt = messages.map(m => m.role + ': ' + m.content).join('\n\n');
       const url = 'https://text.pollinations.ai/' + encodeURIComponent(prompt);
       const raw = execSync(`curl -s -m 90 '${url}'`, { maxBuffer: 4 * 1024 * 1024 }).toString().trim();
-      if (raw.length > 20 && !raw.startsWith('{')) return { output: raw, worker: 'llm', model: 'openai (pollinations)', provider: 'https://text.pollinations.ai/', verifiable: false, attestation: null };
+      if (raw.length > 20 && !raw.startsWith('{')) return { output: raw, model: 'openai (pollinations)', provider: 'https://text.pollinations.ai/', verifiable: false, attestation: null, chat_id: null };
       throw new Error('Unexpected public endpoint output');
     } catch (e) { console.error(`Public LLM attempt ${attempt} failed:`, e.message.slice(0, 120)); }
   }
-  console.error('Public LLM failed, falling back to extractive summariser');
+  throw new Error('all LLM routes failed');
+}
+
+async function workLLM(job, agent) {
+  const quality = agent && agent.skill && typeof agent.skill.quality === 'number' ? agent.skill.quality : 1.0;
+  const messages = promptFor(job, quality);
+  const maxTokens = maxTokensFor(quality);
+  try {
+    const r = await callLLM(messages, maxTokens);
+    return { output: r.output, worker: 'llm', model: r.model, provider: r.provider, verifiable: r.verifiable, attestation: r.attestation, chat_id: r.chat_id || null };
+  } catch (e) {
+    console.error('All LLM routes failed, falling back to extractive summariser');
+  }
   // Route 3: honest fallback — labelled, never claimed as LLM
   return { output: work(job, agent), worker: 'extractive-fallback', model: 'extractive summariser (repo code)', provider: 'local', verifiable: false, attestation: null };
 }
-module.exports = { workLLM };
+module.exports = { workLLM, callLLM };
