@@ -318,9 +318,22 @@ async function main() {
     }
     // Pay through the Core escrow so the frontier updates onchain:
     // post the job (median output hash is the job id), then settle it.
+    // The winner must be the agent's OWNER ACCOUNT (gen3.genesisdemo…),
+    // NOT the token id (genesis-gen-3): pay_job transfers the reward to
+    // the winner account and credits the win to the agent whose owner
+    // matches it. Passing the token id "pays" a non-existent account —
+    // the transfer fails, the reward stays in the Core, and the agent
+    // gets no win. (This bug bit once on 2026-11-05: a passing job for
+    // genesis-gen-3 was paid to the token id, so gen3 got no win and the
+    // 0.01 NEAR stayed in the Core.)
+    let winner = a[1];
+    try {
+      const rec = viewCall(CORE_CONTRACT, 'get_agent', { token_id: a[1] });
+      if (rec && rec.owner_id) winner = rec.owner_id;
+    } catch (_) {}
     const jobId = crypto.createHash('sha256').update(v.medianOutput).digest('hex');
     console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('post_job', { job_id: jobId, brief: job.brief, keywords: job.keywords, min_words: 0 }, 100000000000000n, utils.format.parseNearAmount('0.01'))], dryRun, label: 'post job ' + jobId.slice(0, 12) }));
-    console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('pay_job', { job_id: jobId, winner: a[1], score: v.medianScore, job_def_id: defId }, 100000000000000n, 0n)], dryRun, label: 'pay job to ' + a[1] }));
+    console.log(await sendTx({ signerId: MASTER, keyPair: masterKey(), receiverId: CORE_CONTRACT, actions: [transactions.functionCall('pay_job', { job_id: jobId, winner, score: v.medianScore, job_def_id: defId }, 100000000000000n, 0n)], dryRun, label: 'pay job to ' + winner }));
     return;
   }
   throw new Error('Unknown command: ' + cmd + ' — run: node src/cli.js help');
