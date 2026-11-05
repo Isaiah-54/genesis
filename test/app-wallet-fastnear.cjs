@@ -65,7 +65,21 @@ function loadPage() {
     document: documentStub,
     console,
     navigator: {},
-    fetch: async () => { throw new Error('no network in test'); },
+    fetch: async (url, opts) => {
+      // Simulated testnet RPC: only genesis-visitor-1 already exists.
+      let tokenId = '';
+      try {
+        const body = JSON.parse(opts.body);
+        tokenId = JSON.parse(Buffer.from(body.params.args_base64, 'base64').toString()).token_id;
+      } catch (_) {}
+      const payload = tokenId === 'genesis-visitor-1'
+        ? { token_id: 'genesis-visitor-1', owner_id: 'otoyo4real.testnet' }
+        : null;
+      const bytes = Array.from(Buffer.from(JSON.stringify(payload)));
+      return { json: async () => ({ result: { result: bytes } }) };
+    },
+    btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    TextDecoder: globalThis.TextDecoder,
     crypto: globalThis.crypto,
   };
   sandbox.window = {
@@ -114,5 +128,14 @@ function fail(msg) { console.log('FAIL:', msg); process.exit(1); }
   if (!tx || tx.receiverId !== 'nft.primitives.testnet' || tx.actions[0].methodName !== 'nft_mint') {
     fail('mint tx shape wrong');
   }
+
+  // 5. A duplicate token id is blocked before the wallet opens.
+  const before = calls.sendTransaction.length;
+  page2.$('mintToken').value = 'genesis-visitor-1';
+  await page2.$('mintBtn').listeners.click();
+  console.log('5. duplicate mint blocked:', calls.sendTransaction.length === before,
+    '| status:', JSON.stringify(page2.$('mintStatus').textContent));
+  if (calls.sendTransaction.length !== before) fail('duplicate token id reached the wallet');
+  if (!page2.$('mintStatus').textContent.includes('already taken')) fail('no already-taken message');
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

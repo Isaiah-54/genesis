@@ -107,6 +107,40 @@
       return;
     }
 
+    if (status) status.textContent = 'Checking the token id…';
+
+    // Pre-flight: the shared contract rejects a duplicate token id with a
+    // panic ("token_id must be unique"). Check first so the user never opens
+    // the wallet for a mint that cannot succeed. If the check itself fails
+    // (network error), proceed anyway — the contract still rejects duplicates.
+    try {
+      const check = await fetch('https://rpc.testnet.near.org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 'genesis-mint-check', method: 'query',
+          params: {
+            request_type: 'call_function', account_id: NFT_CONTRACT,
+            method_name: 'nft_token',
+            args_base64: btoa(JSON.stringify({ token_id: tokenId })),
+            finality: 'final',
+          },
+        }),
+      });
+      const data = await check.json();
+      const bytes = data && data.result && data.result.result;
+      if (bytes && bytes.length) {
+        const existing = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes)));
+        if (existing) {
+          if (status) {
+            status.textContent = 'That token id is already taken — pick a new unique token id.';
+            status.style.color = 'var(--red)';
+          }
+          return;
+        }
+      }
+    } catch (_) {}
+
     if (status) status.textContent = 'Approve the mint in your wallet…';
 
     const description =
