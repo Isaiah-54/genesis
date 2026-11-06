@@ -38,9 +38,16 @@
 //   get_agent) + league standing + recent matches. It is the same
 //   data the free CV page shows, plus the full match history and
 //   earnings breakdown — the payment buys the detail, not the agent.
+// - The full NEP-366 SignedDelegate flow (via the fastnear
+//   facilitator) is now a live rail on this route too (2026-11-06):
+//   it needs FASTNEAR_API_KEY, a manually approved per-instance
+//   key, and fails closed with a clear error until the key is set.
+//   The exact rail (direct onchain verification of an ft_transfer)
+//   remains the fallback that needs no key.
 const fs = require('fs');
 const path = require('path');
 const rail = require('./near-intents-rail');
+const fastnear = require('./fastnear-rail');
 
 const RPC_URL = 'https://rpc.testnet.near.org';
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
@@ -141,19 +148,22 @@ function recordPayment(entry) {
 // durable record; the chain is the source of truth).
 const usedTxHashes = new Set();
 
-// The 402 offers BOTH rails, near-intents FIRST (primary) and exact
-// LAST (secondary). The same object goes in the Payment-Required
-// header (base64) and in the JSON body, so header truncation cannot
-// hide it. The exact entry keeps its nonce/expiresAt fields for
-// backwards compatibility.
+// The 402 offers THREE rails, near-intents FIRST (primary),
+// fastnear SECOND (NEAR-native x402) and exact LAST (secondary).
+// The same object goes in the Payment-Required header (base64) and
+// in the JSON body, so header truncation cannot hide it. The exact
+// entry keeps its nonce/expiresAt fields for backwards
+// compatibility.
 function paymentRequirements(tokenId, resourceUrl) {
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
   const accepts = rail.buildAccepts({
     nearIntentsPriceUsdc: INTENTS_PRICE_USDC_SMALLEST,
+    fastnearPriceUsdc: Number(PRICE_USDC_SMALLEST),
     exactPriceUsdc: Number(PRICE_USDC_SMALLEST),
     testnetUsdcContract: USDC_CONTRACT, treasury: TREASURY_ACCOUNT,
     resource: { url: resourceUrl || 'https://genesis-roan-eta.vercel.app/api/agent-premium?token_id=' + tokenId },
     exactDescription: 'Premium CV for ' + tokenId + ' — full match history and earnings breakdown (secondary rail, testnet USDC)',
+    fastnearDescription: 'Premium CV for ' + tokenId + ' — full match history and earnings breakdown (fastnear rail, NEAR-native x402, testnet USDC)',
   });
   const exact = accepts[accepts.length - 1];
   exact.nonce = tokenId + '-' + Date.now();
@@ -174,7 +184,10 @@ function paymentRequiredResponse(res, tokenId, resourceUrl, error, acceptsOverri
     x402: required,
     howToPay: [
       'PRIMARY — near-intents (any chain): send PAYMENT-SIGNATURE {type:"quote", refundTo:"<your address on the origin chain>"} (base64, in ?paymentSignature=) to get a deposit address, deposit, then send {type:"deposit", operationToken, depositAddress, txHash}. Price 0.35 mainnet USDC. Currently blocked: 1Click NEAR quoting is down, so this rail returns 1Click\'s real error until the solvers return.',
-      'SECONDARY — exact (testnet USDC, works now): 1. Get free testnet USDC from the Circle faucet (faucet.circle.com, NEAR Testnet).',
+      'SECONDARY — fastnear (NEAR testnet USDC via the fastnear facilitator, no 1Click): 1. Get free testnet USDC from the Circle faucet (faucet.circle.com, NEAR Testnet).',
+      '2. Sign a NEP-366 SignedDelegate authorizing an ft_transfer of ' + PRICE_DISPLAY + ' to ' + TREASURY_ACCOUNT + ' on ' + USDC_CONTRACT + ' (for example with @fastnear/x402 createNearPaymentFetch pointed at the testnet facilitator https://test.x402.mikedotexe.com).',
+      '3. Retry this URL with ?paymentSignature=<base64 x402 v2 payload with accepted + payload.signedDelegateAction>. The facilitator verifies and settles the delegate; one settlement buys one access. Needs the facilitator API key on the server — if it is not configured yet the endpoint says so instead of failing silently.',
+      'TERTIARY — exact (testnet USDC, works now): 1. Get free testnet USDC from the Circle faucet (faucet.circle.com, NEAR Testnet).',
       '2. Send ' + PRICE_DISPLAY + ' to ' + TREASURY_ACCOUNT + ' with ft_transfer on ' + USDC_CONTRACT + '.',
       '3. Retry this URL with ?paymentTx=<transaction hash>&paymentSender=<your account id>.',
       'The payment is verified onchain; one transaction hash buys one access.',
@@ -294,7 +307,7 @@ async function serveCv(res, tokenId, fetchImpl, settlement) {
     : [];
   const paymentId = settlement.rail === 'near-intents'
     ? 'intents:' + (settlement.operationId || settlement.originTx || '')
-    : 'exact:' + settlement.txHash;
+    : settlement.rail + ':' + settlement.txHash;
   const receipt = rail.signReceipt({
     v: 1, kind: 'premium', paymentId, action: 'premium-cv', token_id: tokenId,
     amountUsdc: String(settlement.amount), rail: settlement.rail,
@@ -339,8 +352,32 @@ module.exports = async (req, res) => {
     if (!presented) return paymentRequiredResponse(res, tokenId, resourceUrl, 'PAYMENT-SIGNATURE is not a valid x402 v2 payload');
     const acc = presented.accepted;
     const isIntents = acc.extra && acc.extra.assetTransferMethod === 'near-intents';
+    if (!isIntents && fastnear.isFastnearPresentation(presented)) {
+      // --- fastnear rail: NEP-366 SignedDelegate, verified and
+      // settled by the fastnear facilitator (testnet). ---
+      const expected = { asset: USDC_CONTRACT, amount: PRICE_USDC_SMALLEST, payTo: TREASURY_ACCOUNT };
+      const verified = await fastnear.verifyFastnearPayment({ presented, expected, fetchImpl });
+      if (verified.kind !== 'valid') {
+        return paymentRequiredResponse(res, tokenId, resourceUrl, verified.kind === 'not_configured' ? verified.message : 'fastnear payment did not verify: ' + verified.message);
+      }
+      const settled = await fastnear.settleFastnearPayment({ presented, expected, fetchImpl });
+      if (settled.kind !== 'settled') {
+        return paymentRequiredResponse(res, tokenId, resourceUrl, settled.kind === 'not_configured' ? settled.message : 'fastnear payment did not settle: ' + settled.message);
+      }
+      const paymentId = 'fastnear:' + settled.transaction;
+      if (usedTxHashes.has(paymentId)) {
+        return paymentRequiredResponse(res, tokenId, resourceUrl, 'this fastnear payment was already used for access');
+      }
+      usedTxHashes.add(paymentId);
+      recordPayment({ token_id: tokenId, txHash: paymentId, sender: settled.payer, amount: PRICE_USDC_SMALLEST, rail: 'fastnear', originTx: settled.transaction, destTx: settled.transaction, paidAt: new Date().toISOString() });
+      return serveCv(res, tokenId, fetchImpl, {
+        rail: 'fastnear', amount: PRICE_USDC_SMALLEST, payer: settled.payer,
+        originTx: settled.transaction, destTx: settled.transaction,
+        txHash: settled.transaction, simulated: false,
+      });
+    }
     if (!isIntents) {
-      return paymentRequiredResponse(res, tokenId, resourceUrl, 'the exact rail takes paymentTx + paymentSender, not a PAYMENT-SIGNATURE — pay testnet USDC to the treasury, then retry with the tx hash');
+      return paymentRequiredResponse(res, tokenId, resourceUrl, 'this PAYMENT-SIGNATURE is neither a near-intents quote/deposit nor a fastnear signed delegate — the exact rail takes paymentTx + paymentSender, not a PAYMENT-SIGNATURE; pay testnet USDC to the treasury, then retry with the tx hash');
     }
     const origin = rail.findOrigin(acc.network, acc.asset);
     if (!origin) return paymentRequiredResponse(res, tokenId, resourceUrl, 'unknown origin network/asset in the presented offer');

@@ -13,10 +13,12 @@
 //   1. The action is VALIDATED onchain first (token free / parents
 //      alive / evolve eligible / listing exists). An invalid action
 //      returns 400 — no payment is ever taken for an impossible action.
-//   2. No payment -> HTTP 402 with BOTH rails, near-intents FIRST
-//      (primary rail) and exact LAST (secondary rail), the same object
-//      in the Payment-Required header and in the JSON body.
-//   3. Verified payment (either rail) -> the server executes the
+//   2. No payment -> HTTP 402 with THREE rails, near-intents
+//      FIRST (primary rail), fastnear SECOND (NEAR-native x402,
+//      works while 1Click's NEAR solvers are down) and exact LAST
+//      (secondary rail), the same object in the Payment-Required
+//      header and in the JSON body.
+//   3. Verified payment (any rail) -> the server executes the
 //      onchain action via the treasury key and returns HTTP 200 with
 //      the result (tx hashes, new token id / new generation / listing
 //      bought) + an ed25519 SIGNED RECEIPT + a PAYMENT-RESPONSE header.
@@ -47,6 +49,11 @@
 // TREASURY.md); on testnet the refill comes from the free NEAR
 // testnet faucet, because testnet USDC has no swap route.
 const EXACT_PRICES = { mint: 50000, breed: 50000, evolve: 10000, buy: 50000 };
+// Prices on the fastnear rail (testnet USDC, same asset as the
+// exact rail — the same 0.05 / 0.01 prices). The fastnear
+// facilitator settles a NEP-366 delegate instead of a plain
+// ft_transfer, but the payer's cost is identical.
+const FASTNEAR_PRICES = { mint: 50000, breed: 50000, evolve: 10000, buy: 50000 };
 // Prices on the near-intents rail (mainnet USDC, 6 decimals). Mint and
 // breed are priced at 0.30 USDC — below the 0.15 NEAR (~$0.38) cost, a Hackathon subsidy; 0.30 is the lowest price that still clears the route minimums.
 // Re-price if NEAR moves materially. Evolve (gas only) and buy
@@ -67,7 +74,11 @@ const INTENTS_PRICES = { mint: 300000, breed: 300000, evolve: 350000, buy: 50000
 //   is currently BLOCKED: quoting into/out of NEAR is down
 //   (2026-11-05 16:08 WAT, every NEAR pair returns HTTP 400). The
 //   rail passes 1Click's real error through and never invents a quote.
-//   The exact rail is the working path until the solvers return.
+//   The exact rail is a working path until the solvers return, and
+//   the fastnear rail is the other working path (NEAR-native x402
+//   via the fastnear facilitator — needs FASTNEAR_API_KEY, a
+//   manually approved per-instance key; without it the rail fails
+//   closed with a clear error instead of settling).
 // - Exactly-once is per serverless instance (in-memory set) plus a
 //   best-effort log at demo/x402-actions.json. Vercel's filesystem is
 //   read-only, so cross-instance replay is not blocked by this code;
@@ -83,6 +94,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const rail = require('./near-intents-rail');
+const fastnear = require('./fastnear-rail');
 const premium = require('./agent-premium')._test;
 
 const { connect, keyStores, KeyPair, utils } = require('near-api-js');
@@ -458,19 +470,22 @@ module.exports = async (req, res) => {
   // 2. Prices. buy is priced from the listing (dry quote, else fixed).
   let exactPrice = EXACT_PRICES[action];
   let intentsPrice = INTENTS_PRICES[action];
+  let fastnearPrice = FASTNEAR_PRICES[action];
   let priceNote = null;
   if (action === 'buy') {
     const priced = await priceBuyInUsdc(validation.listing.price, global.fetch);
     exactPrice = priced.exactUsdc;
     intentsPrice = priced.intentsUsdc;
+    fastnearPrice = priced.exactUsdc; // same testnet USDC price as the exact rail
     priceNote = priced.source + ': ' + priced.note;
   }
 
   const resource = resourceFor(req, action, params);
   const accepts = rail.buildAccepts({
-    nearIntentsPriceUsdc: intentsPrice, exactPriceUsdc: exactPrice,
+    nearIntentsPriceUsdc: intentsPrice, fastnearPriceUsdc: fastnearPrice, exactPriceUsdc: exactPrice,
     testnetUsdcContract: USDC_CONTRACT, treasury: TREASURY_ACCOUNT, resource,
     exactDescription: `Pay ${exactPrice / 1e6} testnet USDC to the treasury (secondary rail — works while 1Click NEAR solvers are down)`,
+    fastnearDescription: `Pay ${fastnearPrice / 1e6} testnet USDC via the fastnear facilitator (NEAR-native x402 — no 1Click, relayer-sponsored gas)`,
   });
   const now = Date.now();
 
@@ -549,8 +564,52 @@ module.exports = async (req, res) => {
     }
     const acc = presented.accepted;
     const isIntents = acc.extra && acc.extra.assetTransferMethod === 'near-intents';
+    if (!isIntents && fastnear.isFastnearPresentation(presented)) {
+      // --- fastnear rail: NEP-366 SignedDelegate, verified and
+      // settled by the fastnear facilitator (testnet). ---
+      const expected = { asset: USDC_CONTRACT, amount: String(fastnearPrice), payTo: TREASURY_ACCOUNT };
+      const verified = await fastnear.verifyFastnearPayment({ presented, expected, fetchImpl: global.fetch });
+      if (verified.kind === 'not_configured') {
+        return payRequired(res, resource.url, accepts, verified.message, 402);
+      }
+      if (verified.kind !== 'valid') {
+        return payRequired(res, resource.url, accepts, 'fastnear payment did not verify: ' + verified.message, 402);
+      }
+      const settled = await fastnear.settleFastnearPayment({ presented, expected, fetchImpl: global.fetch });
+      if (settled.kind === 'not_configured') {
+        return payRequired(res, resource.url, accepts, settled.message, 402);
+      }
+      if (settled.kind !== 'settled') {
+        return payRequired(res, resource.url, accepts, 'fastnear payment did not settle: ' + settled.message, 402);
+      }
+      const paymentId = 'fastnear:' + settled.transaction;
+      if (isPaymentUsed(paymentId)) {
+        return payRequired(res, resource.url, accepts, 'this fastnear payment was already used for an action', 402);
+      }
+      const re = await validateAction(action, params);
+      if (!re.ok) {
+        return res.status(402).json({ ok: false, error: 'the action is no longer valid: ' + re.error + ' — the payment settled onchain (fastnear tx ' + settled.transaction + ') and cannot be auto-refunded; present the same payment again for a corrected action only after it is re-verified', action });
+      }
+      if (action === 'buy') validation.listing = re.listing;
+      let result;
+      try {
+        result = await executor(action, params, { listing: validation.listing });
+      } catch (e) {
+        return res.status(502).json({ ok: false, error: 'payment settled but the action failed onchain: ' + String((e && e.message) || e).slice(0, 300) + ' — the fastnear settlement (' + settled.transaction + ') is spent and cannot be auto-refunded', action, paymentId });
+      }
+      markPaymentUsed({ paymentId, action, token_id: params.token_id || null, rail: 'fastnear', paymentTx: settled.transaction, payer: settled.payer, at: new Date().toISOString() });
+      const actionTx = result.txs && (result.txs.mint || result.txs.buy || result.txs.evolve || result.txs.breed) || '';
+      const receipt = rail.signReceipt({
+        v: 1, kind: 'action', paymentId, action, token_id: params.token_id || null,
+        amountUsdc: String(fastnearPrice), rail: 'fastnear', network: 'near:testnet',
+        transaction: actionTx, originTx: settled.transaction, payer: settled.payer,
+        timestamp: new Date(now).toISOString(), simulated: false,
+      });
+      res.setHeader('PAYMENT-RESPONSE', Buffer.from(JSON.stringify({ success: true, transaction: actionTx, payer: settled.payer, amount: String(fastnearPrice), network: 'near:testnet' })).toString('base64'));
+      return res.status(200).json({ ok: true, mode: modeOk, ...result, priceNote, receipt });
+    }
     if (!isIntents) {
-      return payRequired(res, resource.url, accepts, 'the exact rail takes paymentTx + paymentSender, not a PAYMENT-SIGNATURE — pay testnet USDC to the treasury, then retry with the tx hash', 402);
+      return payRequired(res, resource.url, accepts, 'this PAYMENT-SIGNATURE is neither a near-intents quote/deposit nor a fastnear signed delegate — the exact rail takes paymentTx + paymentSender, not a PAYMENT-SIGNATURE; pay testnet USDC to the treasury, then retry with the tx hash', 402);
     }
     const origin = rail.findOrigin(acc.network, acc.asset);
     if (!origin) {
@@ -637,4 +696,5 @@ module.exports._test = {
   isPaymentUsed,
   EXACT_PRICES,
   INTENTS_PRICES,
+  FASTNEAR_PRICES,
 };

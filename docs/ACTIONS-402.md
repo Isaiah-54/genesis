@@ -3,7 +3,7 @@
 Every Genesis onchain action goes through the 402 payment rail.
 This is the main purpose of Genesis: mint, trade, breed and evolve
 are paid API calls, and no action runs without a verified payment.
-See `docs/X402.md` for the two rails, prices, modes and honest
+See `docs/X402.md` for the three rails, prices, modes and honest
 limits.
 
 ## Endpoint
@@ -27,11 +27,12 @@ limits.
    able to evolve (evolve), the token must be listed (buy). An
    invalid action returns **400** — no payment is ever taken for
    an impossible action.
-2. **No payment → 402.** Seven accepts entries: the six
-   near-intents entries FIRST (primary rail), the exact entry LAST
+2. **No payment → 402.** Eight accepts entries: the six
+   near-intents entries FIRST (primary rail), the fastnear entry
+   SECOND (NEAR-native x402, testnet USDC), the exact entry LAST
    (secondary rail). The same object is in the `Payment-Required`
    header and in the JSON body.
-3. **Pay and retry.** Either rail (below). One payment buys
+3. **Pay and retry.** Any of the three rails (below). One payment buys
    exactly one action execution.
 4. **200 + receipt.** The result (tx hashes, new token id / new
    generation / listing bought) + an ed25519 signed receipt +
@@ -125,26 +126,33 @@ curl -s "https://genesis-roan-eta.vercel.app/api/agent-action?action=mint&token_
 
 ## The premium CV
 
-`GET /api/agent-premium?token_id=<agent>` uses the same two rails
-(near-intents first, exact last, 0.35 mainnet USDC / 0.01 testnet
-USDC). The exact rail takes `?paymentTx=&paymentSender=`; the
+`GET /api/agent-premium?token_id=<agent>` uses the same three rails
+(near-intents first, fastnear second, exact last, 0.35 mainnet USDC
+/ 0.01 testnet USDC). The exact rail takes `?paymentTx=&paymentSender=`; the
 near-intents rail takes `?paymentSignature=` with the same
-quote/deposit dance. See `docs/X402.md`.
+quote/deposit dance; the fastnear rail takes `?paymentSignature=`
+with a signed delegate. See `docs/X402.md`.
 
 ## Tests
 
-- `node test/agent-action.cjs` — 49 checks, mocked, no funds:
+- `node test/agent-action.cjs` — 65 checks, mocked, no funds:
   402 shape, pre-validation, exact payment / reuse / wrong
   amount / wrong receiver / hex-base58 dedup, near-intents quote
   and deposit flows (mock 1Click, test-signed quotes), tampered
   operation token, 1Click outage, bad quote signature, pending
   settlement, demo mode, buy, split-brain completion (a Core-
   registered agent without an NFT is completable; a mismatched
-  receiver is refused), and the premium endpoint's two rails.
-- `node test/near-intents-rail.cjs` — 30 checks: quote signature
+  receiver is refused), fastnear delegate settle / replay /
+  facilitator rejection / no-API-key fail-closed, and the premium
+  endpoint's three rails.
+- `node test/near-intents-rail.cjs` — 31 checks: quote signature
   verification, operation tokens, receipts, offers builder.
-- `node test/x402.cjs` — 11 checks: the premium endpoint's exact
-  rail regression suite.
+- `node test/x402.cjs` — 13 checks: the premium endpoint's exact
+  rail regression suite plus the fastnear delegate flow.
+- `node test/fastnear-rail.cjs` — 51 checks: the fastnear accepts
+  entry, accepts ordering, /verify and /settle request
+  construction, response handling, offer-mismatch refusal, and
+  fail-closed behaviour without FASTNEAR_API_KEY.
 
 ## Live proof
 

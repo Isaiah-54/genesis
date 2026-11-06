@@ -78,6 +78,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const fastnearRail = require('./fastnear-rail');
 
 const ONECLICK_BASE = 'https://1click.chaindefuser.com';
 const FETCH_TIMEOUT_MS = 20000;
@@ -378,9 +379,11 @@ function verifyReceipt(receipt) {
 }
 
 // ---------------------------------------------------------------------------
-// 402 offers. near-intents entries come FIRST (primary rail); the exact
-// entry is LAST (secondary rail). Every entry carries the same object in
-// the header and in the JSON body, so header truncation cannot hide it.
+// 402 offers. near-intents entries come FIRST (primary rail); the
+// fastnear entry is SECOND (NEAR-native x402, works while 1Click's
+// NEAR solvers are down); the exact entry is LAST (secondary rail).
+// Every entry carries the same object in the header and in the JSON
+// body, so header truncation cannot hide it.
 // ---------------------------------------------------------------------------
 function nearIntentsOffers(priceUsdcSmallest, resource) {
   return ORIGINS.map((o) => ({
@@ -415,10 +418,17 @@ function exactOffer(priceUsdcSmallest, testnetUsdcContract, treasury, descriptio
   };
 }
 
-// Full accepts list for an action: near-intents first, exact last.
-function buildAccepts({ nearIntentsPriceUsdc, exactPriceUsdc, testnetUsdcContract, treasury, resource, exactDescription }) {
+// Full accepts list for an action: near-intents first, fastnear
+// second, exact last. fastnearPriceUsdc is optional — when omitted
+// no fastnear entry is offered (the rail is then unavailable for
+// that action); both handlers pass it.
+function buildAccepts({ nearIntentsPriceUsdc, fastnearPriceUsdc, exactPriceUsdc, testnetUsdcContract, treasury, resource, exactDescription, fastnearDescription }) {
+  const fastnear = fastnearPriceUsdc != null
+    ? [fastnearRail.fastnearOffer(fastnearPriceUsdc, testnetUsdcContract, treasury, fastnearDescription)]
+    : [];
   return [
     ...nearIntentsOffers(nearIntentsPriceUsdc, resource),
+    ...fastnear,
     exactOffer(exactPriceUsdc, testnetUsdcContract, treasury, exactDescription),
   ];
 }
