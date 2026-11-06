@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { jobDefId } = require('./engine');
 const { workLLM, callLLM } = require('./worker-llm');
+const { inferenceRecord, inferenceLabel } = require('./inference-label');
 const { verifyRunsWithSemantics } = require('./semantic-verify');
 
 const CORE_CONTRACT = 'core.genesisdemo354551.testnet';
@@ -72,8 +73,11 @@ function rpcView(contractId, method, args) {
     const runs = [];
     for (let i = 1; i <= 3; i++) {
       const llm = await workLLM({ ...jobInput, angle: c.angle }, { skill: { speed: skill.speed, quality: skill.quality, costEff: skill.cost_eff, language: 'en' } });
-      runs.push({ output: llm.output, worker: llm.worker, model: llm.model });
-      console.log(`  ${c.agent} run ${i}: ${llm.worker} (${llm.model}), ${llm.output.length} chars (quality ${skill.quality})`);
+      // Record the inference route with the run (provider, verifiable,
+      // attestation nonce only — never the evidence blob), plus the
+      // display label. Scoring, selection and payment never read it.
+      runs.push({ output: llm.output, worker: llm.worker, model: llm.model, inference: inferenceRecord(llm) });
+      console.log(`  ${c.agent} run ${i}: ${llm.worker} (${llm.model}), ${llm.output.length} chars (quality ${skill.quality}) · inference: ${inferenceLabel(llm)}`);
     }
     // Labinius-style + semantic: all 3 runs must pass the structural
     // gates, the median scores, and the median output must also pass
@@ -85,9 +89,13 @@ function rpcView(contractId, method, args) {
     const v = await verifyRunsWithSemantics(jobInput, runs.map(r => r.output), callLLM, { judgeSource: page });
     const medianOutput = v.medianOutput;
     const outputHash = crypto.createHash('sha256').update(medianOutput).digest('hex');
+    // The entry's inference is the MEDIAN run's route — the run that
+    // counts (and the one paid on). Every run keeps its own route too.
+    const medianRun = runs.find(r => r.output === medianOutput) || runs[0];
     entries.push({
       agent: c.agent,
-      runs: runs.map((r, i) => ({ run: i + 1, worker: r.worker, model: r.model, output: r.output })),
+      runs: runs.map((r, i) => ({ run: i + 1, worker: r.worker, model: r.model, output: r.output, inference: r.inference })),
+      inference: medianRun.inference,
       scores: v.scores,
       medianScore: v.medianScore,
       pass: v.pass,
@@ -149,7 +157,8 @@ function rpcView(contractId, method, args) {
     frontier_before: frontier ? { best_score: frontier.best_score, winner: frontier.winner } : null,
     entries: entries.map(e => ({
       agent: e.agent, worker: e.runs[0].worker, model: e.runs[0].model,
-      runs: e.runs.map(r => ({ run: r.run, output: r.output })),
+      inference: e.inference,
+      runs: e.runs.map(r => ({ run: r.run, output: r.output, inference: r.inference })),
       scores: e.scores, medianScore: e.medianScore, pass: e.pass, semantic: e.semantic,
       output: e.medianOutput, outputHash: e.outputHash,
       words: e.words, keywordsCovered: e.keywordsCovered, keywordsTotal: e.keywordsTotal,
@@ -171,7 +180,7 @@ function rpcView(contractId, method, args) {
     job: brief,
     note: `Strict verifier + semantic judge + median of 3 + frontier. ${note}`,
     payment_tx: payment.tx || null,
-    results: entries.map(e => ({ agent: e.agent, score: e.medianScore, words: e.words, pass: e.pass })),
+    results: entries.map(e => ({ agent: e.agent, score: e.medianScore, words: e.words, pass: e.pass, inference: e.inference ? e.inference.label : 'route not recorded' })),
     winner,
   });
   // Recompute the standings from ALL matches (not just this one), so the

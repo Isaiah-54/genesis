@@ -323,16 +323,31 @@
     }
   }
 
+  // Inference label — small copy of the mapping in src/inference-label.js
+  // (the browser cannot import src/): same labels. The browser worker
+  // only ever uses Pollinations or the local extractive summariser, so
+  // only those two branches are reachable here. The label is taken from
+  // the MEDIAN run's provider, not the attempt's worker string: a run
+  // that fell back to extractive stays labelled extractive even when
+  // another run used Pollinations.
+  function inferenceLabelForProvider(provider) {
+    if (provider === 'local') return 'Fallback: extractive';
+    if (provider === 'https://text.pollinations.ai/') return 'Fallback: Pollinations';
+    return 'route not recorded';
+  }
+
   // Labinius-style: 3 fresh model runs of the same job. All 3 must pass
   // the gates; the attempt is scored by the MEDIAN score, so one lucky
   // output cannot win. onProgress(run) reports each run to the caller.
   async function runBrowserJob(text, brief, keywords, onProgress) {
     const kw = keywords.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
     const outputs = [];
+    const providers = [];
     let worker = 'extractive-fallback';
     for (let run = 0; run < 3; run++) {
       if (onProgress) onProgress(run + 1);
       let output = '';
+      let fromPollinations = false;
       try {
         const prompt =
           'Summarise the following for a brief about "' +
@@ -342,7 +357,7 @@
           '. Write in your own words — do not copy sentences from the text. Write at least three sentences. Text:\n\n' +
           text.slice(0, 2500);
         const r = await fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt));
-        if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; }
+        if (r.ok) { output = await r.text(); worker = 'llm (pollinations, in your browser)'; fromPollinations = true; }
       } catch (_) {}
       if (!output || output.length < 40) {
         const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
@@ -356,7 +371,9 @@
         output =
           '[extractive-fallback] ' +
           (scored.slice(0, 3).map((x) => x.s).join(' ') || text.slice(0, 200));
+        fromPollinations = false;
       }
+      providers.push(fromPollinations ? 'https://text.pollinations.ai/' : 'local');
       outputs.push(output);
     }
     const results = outputs.map((o) => ({ output: o, v: verifyStrictBrowser(text, kw, o) }));
@@ -364,6 +381,7 @@
     const scores = results.map((r) => r.v.score).sort((a, b) => a - b);
     const medianScore = scores[Math.floor(scores.length / 2)];
     const median = results.find((r) => r.v.score === medianScore) || results[0];
+    const medianProvider = providers[outputs.indexOf(median.output)] || 'local';
     return {
       outputs,
       medianOutput: median.output,
@@ -372,6 +390,12 @@
       gates: median.v.gates,
       pass: allPass,
       worker,
+      inference: {
+        provider: medianProvider,
+        verifiable: false,
+        attestation: null,
+        label: inferenceLabelForProvider(medianProvider),
+      },
     };
   }
 
@@ -585,6 +609,16 @@
       if (title) title.textContent = 'Arena run ' + league.matches.length + ' · Strict verifier + median of 3 + frontier · ' + (last.date || '');
       const note = $('latestMatchNote');
       if (note) note.textContent = last.note || '';
+      // Inference route per agent in the latest match, from the recorded
+      // runs; 'route not recorded' when the match predates route
+      // recording (never guessed).
+      const inf = $('latestMatchInference');
+      if (inf) {
+        inf.textContent = 'Inference: ' + last.results.map((r) => {
+          const name = String(r.agent || '').split('.')[0];
+          return name + ' ' + (r.inference || 'route not recorded');
+        }).join(' · ');
+      }
     }
   }
 
@@ -714,6 +748,7 @@
       out.textContent = res.medianOutput;
       verdict.textContent =
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
+        ' · Inference: ' + res.inference.label +
         ' · Runs: ' + res.scores.join(', ') + ' · Median score: ' + res.medianScore +
         (frontier ? ' · Frontier: ' + frontier.best_score : ' · Frontier: none yet') +
         ' · ' + gatesText(res.gates) + ' · Verdict: ' +
@@ -727,6 +762,7 @@
       }
       const payload =
         'Agent: ' + tokenId + ' (' + accountId + ') · Worker: ' + res.worker +
+        ' · Inference: ' + res.inference.label +
         ' · Runs: ' + res.scores.join(', ') + ' · Median score: ' + res.medianScore +
         ' · ' + gatesText(res.gates) + ' · Verdict: PASS' +
         ' · Output hash: ' + hash + ' · Output: ' + res.medianOutput;
@@ -747,6 +783,9 @@
             source: $('agentJobText').value,
             brief: $('agentJobBrief').value,
             keywords: $('agentJobKeywords').value,
+            // Client-reported worker route (the server records it as
+            // such; it plays no part in verification or payment).
+            inference: { provider: res.inference.provider, worker: res.worker, verifiable: false, attestation: null },
           }),
         });
         const pay = await payRes.json();
@@ -792,6 +831,7 @@
       out.textContent = res.medianOutput;
       verdict.textContent =
         (res.pass ? 'PASS' : 'FAIL') +
+        ' · Inference: ' + res.inference.label +
         ' · Runs: ' + res.scores.join(', ') + ' · Median score: ' + res.medianScore +
         ' · ' +
         gatesText(res.gates);

@@ -52,7 +52,7 @@ Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs
 ## How it works
 
 1. **Born** — a gen 0 NFT is minted (0.30 USDC through the 402 rail, or free from the site on testnet). Higher generations are earned, never bought.
-2. **Works** — the agent takes jobs from the onchain board. The worker runs on NEAR AI Cloud (hardware-attested) with Pollinations as fallback.
+2. **Works** — the agent takes jobs from the onchain board. Job work runs on NEAR AI Cloud (attested when available), Agents work with NEAR AI Cloud inference; payment and selection pressure live on-chain. When NEAR AI is unavailable the worker falls back to Pollinations, labelled as a fallback.
 3. **Verified** — three gates, three runs, median score, must beat the onchain frontier. Then a semantic judge checks the median output against the source for factual accuracy, relevance, completeness and evidence — a structured lie fails, however high it scores.
 4. **Paid or not** — beat the frontier and the Core escrow pays 0.01 NEAR automatically. Otherwise nothing.
 5. **Evolves** — 3 paid wins since the last evolution, up to gen 9. Each evolution: +0.1 quality, +0.05 speed, +0.05 cost efficiency.
@@ -69,7 +69,7 @@ Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs
 | Latest breed | **genesis-gen-5** (gen 5, parents gen-2 + gen-3, skills 1.095 / 1.19 / 0.975), bred 2026-11-05 |
 | Marketplace | Open, round-trip verified onchain (list → buy → list back → buy back → delist) |
 | x402 rail | Live. Near-intents first, exact last, signed receipts on every settlement. Near-intents settlement is blocked while 1Click's NEAR quoting is down — the exact rail is the working path |
-| Inference | NEAR AI Cloud wired (free $10 credits), attested; Pollinations fallback |
+| Inference | Job work runs on NEAR AI Cloud (attested when available), Agents work with NEAR AI Cloud inference; payment and selection pressure live on-chain. NEAR AI Cloud is wired (free $10 credits); Pollinations is the labelled fallback |
 
 ## Try it
 

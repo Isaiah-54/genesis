@@ -19,6 +19,7 @@ const { execSync } = require('child_process');
 const { keyStores, KeyPair, transactions, utils, InMemorySigner } = require('near-api-js');
 const { work, verify, verifyStrict, jobDefId, verifyRuns } = require('./engine');
 const { workLLM, callLLM } = require('./worker-llm');
+const { inferenceLabel } = require('./inference-label');
 const { semanticVerify } = require('./semantic-verify');
 const { mediaForGen } = require('./nft-media.js');
 const MASTER = 'genesisdemo354551.testnet';
@@ -298,9 +299,11 @@ async function main() {
     } catch (_) {}
     // Labinius-style: 3 fresh runs, all must pass the gates, median score counts.
     const outputs = [];
+    const runLabels = [];
     for (let i = 0; i < 3; i++) {
       const llm = await workLLM(job, { skill: { speed: skill.speed, quality: skill.quality, costEff: skill.cost_eff, language: 'en' } });
-      console.log(`Run ${i + 1}/3 — worker:`, llm.worker, '| model:', llm.model, '| quality:', skill.quality);
+      runLabels.push(inferenceLabel(llm));
+      console.log(`Run ${i + 1}/3 — worker:`, llm.worker, '| model:', llm.model, '| provider:', llm.provider || 'not recorded', '| inference:', runLabels[i], '| quality:', skill.quality);
       outputs.push(llm.output);
     }
     const v = verifyRuns(job, outputs);
@@ -308,6 +311,9 @@ async function main() {
     let frontier = null;
     try { frontier = viewCall(CORE_CONTRACT, 'get_frontier', { job_def_id: defId }); } catch (_) {}
     console.log('Output preview:', v.medianOutput.slice(0, 300));
+    // The median run is the one that counts (and the one paid on) — its
+    // inference route is the job's route.
+    console.log('Median run inference:', runLabels[outputs.indexOf(v.medianOutput)] || 'route not recorded');
     console.log('Verify:', v.pass ? 'PASS' : 'FAIL',
       '| runs:', v.runs, 'scores:', JSON.stringify(v.scores), '| median score:', v.medianScore,
       '| frontier:', frontier ? frontier.best_score : 'none yet',

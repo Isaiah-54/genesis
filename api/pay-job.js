@@ -338,6 +338,47 @@ async function rpcAccountBalance(accountId) {
   return amount;
 }
 
+// Inference label for the WORKER route — DUPLICATED from
+// src/inference-label.js: the serverless function cannot import src/, so
+// keep the two identical (same inputs, same labels, same order of
+// checks). The worker route here is CLIENT-REPORTED: the browser sends
+// it with the job, the server never verifies it, and the verdict marks
+// it as such. NEAR AI is claimed only for provider 'near-ai' +
+// verifiable true + an attestation carrying the echoed nonce; a model
+// name alone never proves the route.
+function workerInferenceLabel(route) {
+  const r = route || {};
+  if (r.provider === 'near-ai') {
+    return r.verifiable === true && r.attestation && typeof r.attestation.nonce === 'string' && r.attestation.nonce.length > 0
+      ? 'NEAR AI Cloud — attested'
+      : 'NEAR AI Cloud — unattested';
+  }
+  if (r.worker === 'extractive-fallback' || r.provider === 'local') return 'Fallback: extractive';
+  if (r.provider === 'https://text.pollinations.ai/'
+    || r.model === 'openai (pollinations)'
+    || (typeof r.provider === 'string' && r.provider.includes('pollinations'))) return 'Fallback: Pollinations';
+  if (typeof r.provider === 'string' && /^https?:\/\//.test(r.provider)) {
+    return 'Fallback: ' + (typeof r.model === 'string' && r.model ? r.model : 'configured endpoint');
+  }
+  return 'route not recorded';
+}
+
+// Client-reported worker route, reduced to what can be stated honestly:
+// provider + verifiable as sent, attestation as the nonce only (never
+// the evidence blob). Returns null when the client sent nothing usable.
+function parseClientInference(inference) {
+  if (!inference || typeof inference !== 'object') return null;
+  const provider = typeof inference.provider === 'string' && inference.provider.length <= 200 ? inference.provider : null;
+  const model = typeof inference.model === 'string' && inference.model.length <= 200 ? inference.model : null;
+  const worker = typeof inference.worker === 'string' && inference.worker.length <= 200 ? inference.worker : null;
+  const verifiable = inference.verifiable === true;
+  const att = inference.attestation;
+  const attestation = att && typeof att === 'object' && typeof att.nonce === 'string' && att.nonce.length > 0
+    ? { nonce: att.nonce } : null;
+  if (!provider && !model && !worker) return null;
+  return { provider, model, worker, verifiable, attestation };
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'POST only' });
@@ -348,7 +389,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'bad JSON body' });
     }
   }
-  const { token_id, account_id, output, outputs, source, brief, keywords } = body || {};
+  const { token_id, account_id, output, outputs, source, brief, keywords, inference } = body || {};
   if (typeof token_id !== 'string' || !token_id.trim()) {
     return res.status(400).json({ ok: false, error: 'token_id is required' });
   }
@@ -377,6 +418,15 @@ module.exports = async (req, res) => {
   const v = verifyRuns(source, kws, runs);
   const defId = jobDefId(brief, kws, source);
   const outputHash = crypto.createHash('sha256').update(v.medianOutput).digest('hex');
+  // Worker inference route, as reported by the client that ran the job.
+  // The server does not verify it and it plays no part in verification
+  // or payment — it is recorded so the verdict says how the work was
+  // done. The judge's route is recorded separately (verdict.semantic:
+  // provider/model/verifiable, Pollinations on Vercel).
+  const clientInference = parseClientInference(inference);
+  const workerInference = clientInference
+    ? { ...clientInference, label: workerInferenceLabel(clientInference), source: 'client-reported' }
+    : { provider: null, model: null, worker: null, verifiable: false, attestation: null, label: 'route not recorded', source: 'not reported' };
   const verdict = {
     output_hash: outputHash,
     job_def_id: defId,
@@ -385,6 +435,7 @@ module.exports = async (req, res) => {
     median_score: v.medianScore,
     gates: v.medianGates,
     verdict: v.pass ? 'PASS' : 'FAIL',
+    worker_inference: workerInference,
   };
   if (!v.pass) {
     return res.status(200).json({ ok: false, error: 'job did not pass verification', ...verdict });

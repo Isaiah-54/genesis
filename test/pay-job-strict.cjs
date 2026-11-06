@@ -101,5 +101,32 @@ async function call(body) {
   if (r.payload.verdict !== 'FAIL') fail('unusable judge reply did not FAIL the job');
   if (!String(r.payload.error).includes('semantic verification')) fail('unusable-judge refusal does not name semantic verification');
 
+  // 10. Client-reported worker inference is echoed in the verdict as
+  // client-reported — it plays no part in verification or payment.
+  judgeRaw = null;
+  judgeVerdict = { accuracy: 92, relevance: 88, completeness: 85, evidence: 90, unsupported_claims: [], missing: [], reason: 'All claims supported by the source.' };
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD], inference: { provider: 'https://text.pollinations.ai/', worker: 'llm', model: 'openai (pollinations)', verifiable: false, attestation: null } });
+  console.log('10. client-reported Pollinations:', r.status, JSON.stringify(r.payload.worker_inference));
+  if (r.payload.verdict !== 'PASS') fail('client-reported inference changed the verdict');
+  if (!r.payload.worker_inference || r.payload.worker_inference.label !== 'Fallback: Pollinations') fail('Pollinations inference was not labelled as a fallback');
+  if (r.payload.worker_inference.source !== 'client-reported') fail('client-reported inference was not marked as such');
+  if (r.payload.worker_inference.attestation !== null) fail('null attestation was not kept null');
+
+  // 11. No inference sent: the verdict says the route was not recorded.
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD] });
+  console.log('11. no inference sent:', r.status, JSON.stringify(r.payload.worker_inference));
+  if (!r.payload.worker_inference || r.payload.worker_inference.label !== 'route not recorded') fail('missing inference was not labelled route not recorded');
+  if (r.payload.worker_inference.source !== 'not reported') fail('missing inference was not marked not reported');
+
+  // 12. Client-reported NEAR AI: attested only with an echoed nonce, and
+  // the verdict keeps the nonce only — never the evidence blob.
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD], inference: { provider: 'near-ai', verifiable: true, attestation: { nonce: 'abc123', gateway_attestation: { big: 'blob' }, model_attestations: [{ big: 'blob' }] } } });
+  console.log('12a. client-reported NEAR AI with nonce:', r.status, JSON.stringify(r.payload.worker_inference));
+  if (!r.payload.worker_inference || r.payload.worker_inference.label !== 'NEAR AI Cloud — attested') fail('NEAR AI with nonce was not labelled attested');
+  if (JSON.stringify(r.payload.worker_inference.attestation) !== JSON.stringify({ nonce: 'abc123' })) fail('verdict kept more than the attestation nonce: ' + JSON.stringify(r.payload.worker_inference.attestation));
+  r = await call({ ...BASE, outputs: [GOOD, GOOD, GOOD], inference: { provider: 'near-ai', verifiable: true, attestation: null } });
+  console.log('12b. client-reported NEAR AI without attestation:', r.status, JSON.stringify(r.payload.worker_inference));
+  if (!r.payload.worker_inference || r.payload.worker_inference.label !== 'NEAR AI Cloud — unattested') fail('NEAR AI without attestation was not labelled unattested');
+
   console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('TEST ERROR:', e); process.exit(1); });

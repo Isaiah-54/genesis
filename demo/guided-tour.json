@@ -18,7 +18,16 @@
    453,
    453
   ],
-  "median": 453
+  "median": 453,
+  "inference": {
+   "provider": "pollinations",
+   "model": "openai (pollinations)",
+   "worker": "llm",
+   "verifiable": false,
+   "attestation": null,
+   "label": "Fallback: Pollinations",
+   "attestation_status": "not recorded"
+  }
  },
  "gen3": {
   "agent": "genesis-gen-3",
@@ -3298,7 +3307,17 @@
     ]
    },
    "sourceBudgetChars": 12000,
-   "judgedAt": "2026-11-05T21:13:38.535Z"
+   "judgedAt": "2026-11-05T21:13:38.535Z",
+   "label": "NEAR AI Cloud — attested"
+  },
+  "inference": {
+   "provider": "pollinations",
+   "model": "openai (pollinations)",
+   "worker": "llm",
+   "verifiable": false,
+   "attestation": null,
+   "label": "Fallback: Pollinations",
+   "attestation_status": "not recorded"
   }
  },
  "payment": {

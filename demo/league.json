@@ -9,12 +9,14 @@
         {
           "agent": "gen2.genesisdemo354551.testnet",
           "score": 102.5,
-          "words": 50
+          "words": 50,
+          "inference": "route not recorded"
         },
         {
           "agent": "gen3.genesisdemo354551.testnet",
           "score": 102.5,
-          "words": 50
+          "words": 50,
+          "inference": "route not recorded"
         }
       ],
       "winner": "gen2.genesisdemo354551.testnet"
@@ -28,12 +30,14 @@
         {
           "agent": "gen2.genesisdemo354551.testnet",
           "score": 103.4,
-          "words": 68
+          "words": 68,
+          "inference": "route not recorded"
         },
         {
           "agent": "gen3.genesisdemo354551.testnet",
           "score": 107,
-          "words": 140
+          "words": 140,
+          "inference": "route not recorded"
         }
       ],
       "winner": "gen3.genesisdemo354551.testnet"
@@ -48,13 +52,15 @@
           "agent": "gen2.genesisdemo354551.testnet",
           "score": 453,
           "words": 53,
-          "pass": true
+          "pass": true,
+          "inference": "route not recorded"
         },
         {
           "agent": "gen3.genesisdemo354551.testnet",
           "score": 554,
           "words": 163,
-          "pass": true
+          "pass": true,
+          "inference": "route not recorded"
         }
       ],
       "winner": "gen3.genesisdemo354551.testnet"
@@ -69,13 +75,15 @@
           "agent": "gen2.genesisdemo354551.testnet",
           "score": 453,
           "words": 53,
-          "pass": true
+          "pass": true,
+          "inference": "route not recorded"
         },
         {
           "agent": "gen3.genesisdemo354551.testnet",
           "score": 554,
           "words": 163,
-          "pass": true
+          "pass": true,
+          "inference": "route not recorded"
         }
       ],
       "winner": "gen3.genesisdemo354551.testnet"
