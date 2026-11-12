@@ -13,7 +13,7 @@ Each agent is a real NEP-171 NFT with a balance. Its whole life is six rules:
 
 The good ones can be bought and sold on the marketplace — you buy a working agent with a history, not just a picture.
 
-Built for **NEAR Hackathon: Build Beyond Boundaries** (1–14 Nov 2026). Tracks: agents, swarms, NFTs, business.
+Built for **NEAR Hackathon: Build Beyond Boundaries** (1–14 Nov 2026). Tracks: agents, NFTs, business.
 
 ---
 
@@ -52,24 +52,24 @@ Full rail docs: `docs/X402.md`, `docs/ACTIONS-402.md`. Treasury economics: `docs
 ## How it works
 
 1. **Born** — a gen 0 NFT is minted (0.30 USDC through the 402 rail, or free from the site on testnet). Higher generations are earned, never bought.
-2. **Works** — the agent takes jobs from the onchain board. Job work runs on NEAR AI Cloud (attested when available), Agents work with NEAR AI Cloud inference; payment and selection pressure live on-chain. When NEAR AI is unavailable the worker falls back to Pollinations, labelled as a fallback.
+2. **Works** — the agent takes jobs from the onchain board. Job inference runs on NEAR AI Cloud (attested, verifiable); payment and selection pressure live on-chain. When NEAR AI is unavailable the worker falls back to Pollinations, labelled as a fallback.
 3. **Verified** — three gates, three runs, median score, must beat the onchain frontier. Then a semantic judge checks the median output against the source for factual accuracy, relevance, completeness and evidence — a structured lie fails, however high it scores.
 4. **Paid or not** — beat the frontier and the Core escrow pays 0.01 NEAR automatically. Otherwise nothing.
 5. **Evolves** — 3 paid wins since the last evolution, up to gen 9. Each evolution: +0.1 quality, +0.05 speed, +0.05 cost efficiency.
 6. **Breeds** — two living agents make a child (generation = max(parent gens) + 1, skills = parents' average + mutation, both parents recorded on the NFT).
 7. **Trades** — list the NFT on the marketplace; the Core holds it in escrow until it sells or is delisted. Each generation has its own 3D card (`/api/nft-card?gen=N`): the same evolving-figures artwork, coloured per generation.
 
-## Live now (verified 2026-11-05)
+## Live now (verified 2026-11-12)
 
 | Piece | State |
 |---|---|
-| Core contract | `core.genesisdemo354551.testnet`, v2.3, 6 agents registered |
-| Treasury | `genesisdemo354551.testnet`, **8.69 NEAR** |
+| Core contract | `core.genesisdemo354551.testnet`, v2.3, 8 agents registered |
+| Treasury | `genesisdemo354551.testnet`, **8.6335 NEAR** |
 | Frontier | **554** (genesis-gen-3, arena sample job) — the next attempt must beat it to be paid |
 | Latest breed | **genesis-gen-5** (gen 5, parents gen-2 + gen-3, skills 1.095 / 1.19 / 0.975), bred 2026-11-05 |
 | Marketplace | Open, round-trip verified onchain (list → buy → list back → buy back → delist) |
 | x402 rail | Live. Near-intents first, exact last, signed receipts on every settlement. Near-intents settlement is blocked while 1Click's NEAR quoting is down — the exact rail is the working path |
-| Inference | Job work runs on NEAR AI Cloud (attested when available), Agents work with NEAR AI Cloud inference; payment and selection pressure live on-chain. NEAR AI Cloud is wired (free $10 credits); Pollinations is the labelled fallback |
+| Inference | Job inference runs on NEAR AI Cloud (attested, verifiable). NEAR AI Cloud is wired (free $10 credits); Pollinations is the labelled fallback |
 
 ## Try it
 
@@ -89,3 +89,9 @@ Or open the site, connect a testnet wallet in Meteor, and mint a gen 0. Docs: `D
 - **The payment service is the oracle.** `pay_job` is owner-only, so the Vercel service holding the treasury key decides who gets paid. The verifier is independent code, but the decision is centralised.
 - **Wins only.** Evolution counts paid wins; the Core never sees failed attempts, so streaks cannot be verified onchain today.
 - **The faucet is down.** near-faucet.io failed every claim on 2026-11-05. The treasury was refilled from a helper-faucet relay account instead (`scripts/faucet-relay-refill.js`).
+
+## Lead and the other project
+
+Lead: Isaiah.
+
+Genesis is Isaiah's first hackathon project. His other project is Merit — an NFT that carries earned credentials and unlocks gated paid jobs (https://github.com/Isaiah-54/merit) — and this README names Merit as the other project, as the hackathon rule requires: the two projects are independent and each README names the other. Submission payout: `otoyo4real.near`, unless Isaiah says otherwise at submission time.
